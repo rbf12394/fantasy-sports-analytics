@@ -1215,8 +1215,6 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
             - Point totals (`<points>`, `<player_points>`, etc.)
             - Bench indicators ("BN", roster status, etc.)
             """)
-    
-    with tab_trends:
         st.header("Weekly Performance Trends")
         
         # Get team totals
