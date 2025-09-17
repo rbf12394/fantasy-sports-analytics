@@ -673,10 +673,30 @@ class FootballAnalytics:
         except Exception:
             return []
     
+    def _extract_position_and_status(self, player_element) -> Tuple[str, bool]:
+        """Extract player position and determine if they were a starter"""
+        # Try to find roster position (starting position)
+        roster_pos_el = player_element.find('y:roster_position', config.YAHOO_NS)
+        if roster_pos_el is not None and roster_pos_el.text:
+            roster_position = roster_pos_el.text.strip()
+            # If roster position is BN (bench), they're not a starter
+            is_starter = roster_position != "BN"
+            if is_starter:
+                return roster_position, True
+            else:
+                # If benched, get their actual position from other fields
+                actual_position = self._extract_position(player_element)
+                return actual_position, False
+        
+        # Fallback to regular position extraction
+        position = self._extract_position(player_element)
+        # If we can't determine roster status, assume starter for now
+        return position, True
+    
     def _extract_position(self, player_element) -> str:
-        """Extract player position"""
-        # Try multiple locations
-        for path in ['y:display_position', 'y:eligible_positions/y:position', 'y:primary_position']:
+        """Extract player position (not roster position)"""
+        # Try multiple locations for position
+        for path in ['y:display_position', 'y:eligible_positions/y:position', 'y:primary_position', 'y:position']:
             pos_el = player_element.find(path, config.YAHOO_NS)
             if pos_el is not None and pos_el.text:
                 return pos_el.text
@@ -713,12 +733,18 @@ class FootballAnalytics:
         position = str(position).upper().strip()
         return self.POSITION_MAPPING.get(position, 'OTHER')
     
-    def create_positional_heatmap(self, data: List[Dict]) -> Tuple[plt.Figure, pd.DataFrame]:
+    def create_positional_heatmap(self, data: List[Dict], starters_only: bool = False) -> Tuple[plt.Figure, pd.DataFrame]:
         """Create positional heatmap"""
         if not data:
             return None, pd.DataFrame()
         
         df = pd.DataFrame(data)
+        
+        # Filter for starters only if requested
+        if starters_only:
+            df = df[df['Is_Starter'] == True]
+            if df.empty:
+                return None, pd.DataFrame()
         
         # Aggregate by team and position
         totals = df.groupby(["Team", "Position"])["Points"].sum().reset_index()
@@ -754,7 +780,10 @@ class FootballAnalytics:
         
         # Formatting
         plt.colorbar(im, ax=ax, label='Fantasy Points')
-        plt.title("Fantasy Points by Position", fontsize=14, weight='bold', pad=15)
+        
+        # Dynamic title based on filter
+        title = "Starting Lineup Fantasy Points by Position" if starters_only else "Total Roster Fantasy Points by Position"
+        plt.title(title, fontsize=14, weight='bold', pad=15)
         plt.xlabel("Position", fontsize=12, weight='bold')
         plt.ylabel("Team", fontsize=12, weight='bold')
         plt.tight_layout()
@@ -1014,6 +1043,16 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
             st.info("Please select at least one week to analyze.")
             return
         
+        # Add toggle for starters vs all players
+        analysis_type = st.radio(
+            "Analysis Type:",
+            ["All Players (Roster Depth)", "Starters Only (Actual Lineup)"],
+            index=0,
+            help="All Players shows total roster assets including bench. Starters Only shows points from actual weekly lineups."
+        )
+        
+        starters_only = analysis_type.startswith("Starters Only")
+        
         # Collect data
         all_data = []
         progress = st.progress(0)
@@ -1029,17 +1068,61 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
             return
         
         # Create visualization
-        fig, pivot = analytics.create_positional_heatmap(all_data)
+        fig, pivot = analytics.create_positional_heatmap(all_data, starters_only=starters_only)
         
         if fig is not None:
             weeks_str = f"Week {weeks_to_analyze[0]}" if len(weeks_to_analyze) == 1 else f"Weeks {weeks_to_analyze[0]}-{weeks_to_analyze[-1]}"
-            st.subheader(f"Points by Position - {weeks_str}")
+            
+            # Display the chart
             st.pyplot(fig, use_container_width=True)
+            
+            # Additional analysis based on selection
+            if starters_only:
+                st.subheader("Starting Lineup Analysis")
+                st.write("This shows fantasy points from players who were actually started in lineups.")
+                
+                # Calculate bench vs starter comparison
+                df_all = pd.DataFrame(all_data)
+                if 'Is_Starter' in df_all.columns:
+                    starters_total = df_all[df_all['Is_Starter'] == True]['Points'].sum()
+                    bench_total = df_all[df_all['Is_Starter'] == False]['Points'].sum()
+                    total_points = starters_total + bench_total
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Starter Points", f"{starters_total:.1f}")
+                    with col2:
+                        st.metric("Bench Points", f"{bench_total:.1f}")
+                    with col3:
+                        st.metric("Starter Efficiency", f"{(starters_total/total_points*100):.1f}%")
+            else:
+                st.subheader("Total Roster Analysis")
+                st.write("This shows all fantasy points available on rosters, including bench players.")
             
             st.subheader("Data Table")
             st.dataframe(pivot.style.format("{:.1f}"))
+            
+            # Show player-level detail if starters only
+            if starters_only and all_data:
+                with st.expander("Top Starting Performers by Position"):
+                    df_detail = pd.DataFrame(all_data)
+                    starters_df = df_detail[df_detail['Is_Starter'] == True]
+                    
+                    for pos in ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']:
+                        pos_players = starters_df[starters_df['Position'] == pos]
+                        if not pos_players.empty:
+                            top_performers = pos_players.nlargest(5, 'Points')[['Player', 'Team', 'Points', 'Week']]
+                            if not top_performers.empty:
+                                st.write(f"**{pos} Leaders:**")
+                                st.dataframe(top_performers, use_container_width=True)
         else:
             st.warning("Unable to create visualization.")
+            
+            # Debug info to help troubleshoot
+            if all_data:
+                st.write("Debug: Sample data structure")
+                sample_data = pd.DataFrame(all_data[:5])
+                st.dataframe(sample_data)
     
     with tab_trends:
         st.header("Weekly Performance Trends")
