@@ -648,25 +648,9 @@ class FootballAnalytics:
             team_data = []
             
             for player in root.findall('.//y:player', config.YAHOO_NS):
-                # Get player name
-                name_el = player.find('y:name/y:full', config.YAHOO_NS)
-                if name_el is None:
-                    name_el = player.find('y:name', config.YAHOO_NS)
-                player_name = name_el.text if name_el is not None else "Unknown"
-                
-                # Get position
-                position = self._extract_position(player)
-                
-                # Get fantasy points
-                points = self._extract_points(player)
-                
-                team_data.append({
-                    "Team": team_name,
-                    "Player": player_name,
-                    "Position": self._clean_position(position),
-                    "Week": week,
-                    "Points": points
-                })
+                player_data = self._extract_player_data(player, team_name, week)
+                if player_data:
+                    team_data.append(player_data)
             
             return team_data
             
@@ -740,10 +724,17 @@ class FootballAnalytics:
         
         df = pd.DataFrame(data)
         
+        # Debug: Check if Is_Starter column exists
+        if 'Is_Starter' not in df.columns:
+            # If no starter info available, add default column
+            df['Is_Starter'] = True  # Assume all are starters if we can't determine
+            st.warning("Starter/bench information not available from API. Showing all players.")
+        
         # Filter for starters only if requested
         if starters_only:
             df = df[df['Is_Starter'] == True]
             if df.empty:
+                st.warning("No starter data found. The Yahoo API might not be providing roster position information.")
                 return None, pd.DataFrame()
         
         # Aggregate by team and position
