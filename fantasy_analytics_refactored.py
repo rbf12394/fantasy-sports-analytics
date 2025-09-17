@@ -654,8 +654,40 @@ class FootballAnalytics:
             
             return team_data
             
-        except Exception:
+        except Exception as e:
+            st.error(f"Error fetching data from {endpoint}: {e}")
             return []
+    
+    def debug_api_response(self, week: int, team_key: str = None) -> str:
+        """Get raw XML response for debugging"""
+        if team_key is None:
+            team_keys = self.get_team_keys()
+            if team_keys:
+                team_key = team_keys[0][0]  # Use first team
+            else:
+                return "No team keys available"
+        
+        endpoints = [
+            f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}/players/stats",
+            f"{config.FANTASY_BASE_URL}/team/{team_key}/players/stats;week={week}",
+            f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
+        ]
+        
+        debug_info = []
+        for i, endpoint in enumerate(endpoints):
+            try:
+                resp = self.oauth.get(endpoint)
+                debug_info.append(f"=== ENDPOINT {i+1} ===")
+                debug_info.append(f"URL: {endpoint}")
+                debug_info.append(f"Status: {resp.status_code}")
+                debug_info.append(f"Response Length: {len(resp.text)}")
+                debug_info.append("=" * 50)
+                debug_info.append(resp.text[:2000] + "..." if len(resp.text) > 2000 else resp.text)
+                debug_info.append("\n" + "=" * 80 + "\n")
+            except Exception as e:
+                debug_info.append(f"Error with endpoint {i+1}: {e}")
+        
+        return "\n".join(debug_info)
     
     def _extract_position_and_status(self, player_element) -> Tuple[str, bool]:
         """Extract player position and determine if they were a starter"""
@@ -1018,7 +1050,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
     st.write(f"Available weeks: {available_weeks}")
     
     # Create tabs
-    tab_positional, tab_trends = st.tabs(["🎯 Positional Analysis", "📈 Weekly Trends"])
+    tab_positional, tab_trends, tab_debug = st.tabs(["🎯 Positional Analysis", "📈 Weekly Trends", "🔍 API Debug"])
     
     with tab_positional:
         st.header("Positional Fantasy Points Analysis")
@@ -1058,6 +1090,14 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
             st.error("No positional data found.")
             return
         
+        # Debug: Show sample of collected data
+        with st.expander("Debug: Sample Data Structure", expanded=False):
+            if all_data:
+                sample_df = pd.DataFrame(all_data[:10])
+                st.dataframe(sample_df)
+                st.write(f"Total records collected: {len(all_data)}")
+                st.write(f"Columns: {list(sample_df.columns) if not sample_df.empty else 'No data'}")
+        
         # Create visualization
         fig, pivot = analytics.create_positional_heatmap(all_data, starters_only=starters_only)
         
@@ -1079,13 +1119,14 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                     bench_total = df_all[df_all['Is_Starter'] == False]['Points'].sum()
                     total_points = starters_total + bench_total
                     
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Starter Points", f"{starters_total:.1f}")
-                    with col2:
-                        st.metric("Bench Points", f"{bench_total:.1f}")
-                    with col3:
-                        st.metric("Starter Efficiency", f"{(starters_total/total_points*100):.1f}%")
+                    if total_points > 0:
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Starter Points", f"{starters_total:.1f}")
+                        with col2:
+                            st.metric("Bench Points", f"{bench_total:.1f}")
+                        with col3:
+                            st.metric("Starter Efficiency", f"{(starters_total/total_points*100):.1f}%")
             else:
                 st.subheader("Total Roster Analysis")
                 st.write("This shows all fantasy points available on rosters, including bench players.")
@@ -1097,23 +1138,83 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
             if starters_only and all_data:
                 with st.expander("Top Starting Performers by Position"):
                     df_detail = pd.DataFrame(all_data)
-                    starters_df = df_detail[df_detail['Is_Starter'] == True]
-                    
-                    for pos in ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']:
-                        pos_players = starters_df[starters_df['Position'] == pos]
-                        if not pos_players.empty:
-                            top_performers = pos_players.nlargest(5, 'Points')[['Player', 'Team', 'Points', 'Week']]
-                            if not top_performers.empty:
-                                st.write(f"**{pos} Leaders:**")
-                                st.dataframe(top_performers, use_container_width=True)
+                    if 'Is_Starter' in df_detail.columns:
+                        starters_df = df_detail[df_detail['Is_Starter'] == True]
+                        
+                        for pos in ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']:
+                            pos_players = starters_df[starters_df['Position'] == pos]
+                            if not pos_players.empty:
+                                top_performers = pos_players.nlargest(5, 'Points')[['Player', 'Team', 'Points', 'Week']]
+                                if not top_performers.empty:
+                                    st.write(f"**{pos} Leaders:**")
+                                    st.dataframe(top_performers, use_container_width=True)
+                    else:
+                        st.info("Starter/bench information not available to show position leaders.")
         else:
             st.warning("Unable to create visualization.")
+    
+    with tab_debug:
+        st.header("Yahoo API Debug Tool")
+        st.write("Use this to examine raw API responses and help troubleshoot data extraction issues.")
+        
+        # Get team keys for testing
+        team_keys = analytics.get_team_keys()
+        
+        if team_keys:
+            selected_team_debug = st.selectbox(
+                "Select team for debug:",
+                [f"{name} ({key})" for key, name in team_keys],
+                key="debug_team_select"
+            )
             
-            # Debug info to help troubleshoot
-            if all_data:
-                st.write("Debug: Sample data structure")
-                sample_data = pd.DataFrame(all_data[:5])
-                st.dataframe(sample_data)
+            debug_week = st.selectbox("Select week for debug:", available_weeks, key="debug_week_select")
+            
+            if st.button("Fetch Raw XML Response", key="debug_fetch"):
+                team_key = selected_team_debug.split("(")[1].rstrip(")")
+                
+                with st.spinner("Fetching API responses..."):
+                    debug_output = analytics.debug_api_response(debug_week, team_key)
+                
+                st.text_area(
+                    "Raw API Response:",
+                    debug_output,
+                    height=400,
+                    help="Copy this output to help troubleshoot data extraction issues"
+                )
+                
+                # Also show what our current extraction produces
+                st.subheader("Current Data Extraction Result")
+                current_data = analytics.get_positional_data(debug_week)
+                if current_data:
+                    debug_df = pd.DataFrame(current_data)
+                    team_data = debug_df[debug_df['Team'] == selected_team_debug.split(" (")[0]]
+                    st.dataframe(team_data)
+                else:
+                    st.write("No data extracted")
+        else:
+            st.warning("No team data available for debugging.")
+            
+        # Instructions for user
+        with st.expander("How to use this debug tool"):
+            st.markdown("""
+            **Steps to help improve data extraction:**
+            
+            1. Select a team and week above
+            2. Click "Fetch Raw XML Response" 
+            3. Copy the XML output
+            4. Look for patterns in the XML that indicate:
+               - Player names
+               - Positions 
+               - Fantasy points
+               - Starter vs bench status
+            5. Share findings to help improve the parser
+            
+            **What to look for:**
+            - `<player>` elements
+            - Position information (`<position>`, `<roster_position>`, etc.)
+            - Point totals (`<points>`, `<player_points>`, etc.)
+            - Bench indicators ("BN", roster status, etc.)
+            """)
     
     with tab_trends:
         st.header("Weekly Performance Trends")
