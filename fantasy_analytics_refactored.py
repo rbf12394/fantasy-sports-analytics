@@ -176,21 +176,21 @@ class YahooAuth:
 class BaseballAnalytics:
     """Baseball fantasy analytics"""
     
-    # Stat mappings
-    STAT_MAP = {
-        '7': 'Runs', '12': 'Home Runs', '13': 'RBIs', '16': 'Stolen Bases',
-        '55': 'OPS', '42': 'Strikeouts', '26': 'ERA', '27': 'WHIP',
-        '83': 'Quality Starts', '89': 'Saves + Holds'
-    }
-    
-    WANTED_COLS = list(STAT_MAP.values())
-    RATE_COLS = ['OPS', 'ERA', 'WHIP']
-    LOWER_BETTER = ['ERA', 'WHIP']
-    COUNT_COLS = [c for c in WANTED_COLS if c not in RATE_COLS]
-    
     def __init__(self, league_key: str, oauth_session: OAuth2Session):
         self.league_key = league_key
         self.oauth = oauth_session
+        
+        # Stat mappings - moved to __init__ to fix scoping issue
+        self.STAT_MAP = {
+            '7': 'Runs', '12': 'Home Runs', '13': 'RBIs', '16': 'Stolen Bases',
+            '55': 'OPS', '42': 'Strikeouts', '26': 'ERA', '27': 'WHIP',
+            '83': 'Quality Starts', '89': 'Saves + Holds'
+        }
+        
+        self.WANTED_COLS = list(self.STAT_MAP.values())
+        self.RATE_COLS = ['OPS', 'ERA', 'WHIP']
+        self.LOWER_BETTER = ['ERA', 'WHIP']
+        self.COUNT_COLS = [c for c in self.WANTED_COLS if c not in self.RATE_COLS]
     
     @st.cache_data(ttl=config.CACHE_TTL)
     def week_has_data(_self, week: int) -> bool:
@@ -411,15 +411,16 @@ class BaseballAnalytics:
 class FootballAnalytics:
     """Football fantasy analytics"""
     
-    POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
-    POSITION_MAPPING = {
-        'QB': 'QB', 'RB': 'RB', 'WR': 'WR', 'TE': 'TE', 'K': 'K',
-        'DEF': 'DEF', 'DST': 'DEF', 'D/ST': 'DEF'
-    }
-    
     def __init__(self, league_key: str, oauth_session: OAuth2Session):
         self.league_key = league_key
         self.oauth = oauth_session
+        
+        # Position mappings - moved to __init__ to fix scoping issue
+        self.POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
+        self.POSITION_MAPPING = {
+            'QB': 'QB', 'RB': 'RB', 'WR': 'WR', 'TE': 'TE', 'K': 'K',
+            'DEF': 'DEF', 'DST': 'DEF', 'D/ST': 'DEF'
+        }
     
     @st.cache_data(ttl=config.CACHE_TTL)
     def week_has_data(_self, week: int) -> bool:
