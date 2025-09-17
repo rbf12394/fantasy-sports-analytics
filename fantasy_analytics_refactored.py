@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fantasy Sports Analytics Suite - Single File Version
+Fantasy Sports Analytics Suite - Enhanced Version
 A comprehensive Streamlit application for Yahoo Fantasy Sports analytics
 """
 
@@ -174,7 +174,7 @@ class YahooAuth:
 # =============================================================================
 
 class BaseballAnalytics:
-    """Baseball fantasy analytics"""
+    """Baseball fantasy analytics with enhanced z-score and strength analysis"""
     
     def __init__(self, league_key: str, oauth_session: OAuth2Session):
         self.league_key = league_key
@@ -288,6 +288,53 @@ class BaseballAnalytics:
         except Exception as e:
             st.error(f"Error fetching week {week} data: {e}")
             return pd.DataFrame()
+    
+    def compute_weekly_z_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Compute z-scores for weekly performance"""
+        z_scores = df.copy()
+        
+        for col in df.columns:
+            std = df[col].std(ddof=0)
+            if std == 0 or pd.isna(std):
+                z_scores[col] = 0
+            else:
+                z_scores[col] = (df[col] - df[col].mean()) / std
+        
+        # Invert z-scores for "lower is better" stats
+        for col in self.LOWER_BETTER:
+            if col in z_scores.columns:
+                z_scores[col] *= -1
+        
+        # Clip extreme values
+        return z_scores.clip(lower=-3, upper=3)
+    
+    def compute_team_strength(self, weeks: List[int]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Compute team strength based on z-scores across multiple weeks"""
+        all_z_scores = []
+        
+        for week in weeks:
+            df = self.get_weekly_stats(week)
+            if df is None or df.empty:
+                continue
+            
+            z_scores = self.compute_weekly_z_scores(df)
+            z_scores['Week'] = week
+            all_z_scores.append(z_scores)
+        
+        if not all_z_scores:
+            return pd.DataFrame(), pd.DataFrame()
+        
+        # Combine all weeks
+        combined_z = pd.concat(all_z_scores)
+        
+        # Calculate mean z-scores (overall strength)
+        strength_scores = combined_z.groupby(level=0)[self.WANTED_COLS].mean()
+        
+        # Calculate consistency (lower std = more consistent)
+        consistency_scores = combined_z.groupby(level=0)[self.WANTED_COLS].std()
+        consistency_scores = consistency_scores.fillna(0)
+        
+        return strength_scores, consistency_scores
     
     def compute_cumulative_stats(self, weeks: List[int]) -> Tuple[pd.DataFrame, List[str]]:
         """Compute cumulative stats across weeks"""
@@ -403,9 +450,63 @@ class BaseballAnalytics:
         plt.tight_layout()
         
         return fig
+    
+    def create_z_score_heatmap(self, strength_scores: pd.DataFrame) -> plt.Figure:
+        """Create z-score strength heatmap"""
+        # Color function for z-scores
+        def z_color(z_val: float):
+            if pd.isna(z_val):
+                return 'white'
+            elif z_val >= 1.5:
+                return 'darkgreen'
+            elif z_val >= 0.5:
+                return 'lightgreen'
+            elif z_val >= -0.5:
+                return 'lightyellow'
+            elif z_val >= -1.5:
+                return 'lightcoral'
+            else:
+                return 'darkred'
+        
+        colors = strength_scores.applymap(z_color)
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Draw heatmap
+        for i in range(strength_scores.shape[0]):
+            for j in range(strength_scores.shape[1]):
+                z_val = strength_scores.iloc[i, j]
+                
+                ax.add_patch(plt.Rectangle((j, i), 1, 1, fill=True, color=colors.iloc[i, j]))
+                
+                if pd.notna(z_val):
+                    # Choose text color based on background
+                    text_color = 'white' if abs(z_val) > 1 else 'black'
+                    ax.text(j + 0.5, i + 0.5, f"{z_val:.2f}", 
+                           ha='center', va='center', fontsize=9, weight='bold', 
+                           color=text_color)
+                else:
+                    ax.text(j + 0.5, i + 0.5, "—", ha='center', va='center', fontsize=9)
+        
+        # Labels and formatting
+        ax.set_xticks([x + 0.5 for x in range(strength_scores.shape[1])])
+        ax.set_xticklabels(strength_scores.columns, rotation=30, ha='right', fontsize=10)
+        ax.set_yticks([y + 0.5 for y in range(strength_scores.shape[0])])
+        ax.set_yticklabels(strength_scores.index, fontsize=10)
+        ax.set_xlim(0, strength_scores.shape[1])
+        ax.set_ylim(0, strength_scores.shape[0])
+        ax.invert_yaxis()
+        ax.set_title("Team Strength (Z-Scores)", fontsize=14, weight='bold')
+        ax.tick_params(left=False, bottom=False)
+        
+        plt.grid(False)
+        plt.tight_layout()
+        
+        return fig
 
 # =============================================================================
-# FOOTBALL ANALYTICS
+# FOOTBALL ANALYTICS (unchanged)
 # =============================================================================
 
 class FootballAnalytics:
@@ -693,6 +794,7 @@ def render_sidebar():
         
         Advanced analytics for Yahoo Fantasy leagues:
         - Team performance heatmaps
+        - Z-score strength analysis
         - Weekly trends analysis  
         - Positional breakdowns
         - Customizable timeframes
@@ -735,7 +837,7 @@ def handle_authentication():
     return True, st.session_state.token, None
 
 def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
-    """Render baseball analytics"""
+    """Render enhanced baseball analytics"""
     analytics = BaseballAnalytics(league_key, oauth_session)
     
     st.success("⚾ Running Fantasy Baseball Analytics...")
@@ -772,6 +874,9 @@ def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
         st.warning("No data available for selected timeframe.")
         return
     
+    # Compute strength analysis
+    strength_scores, consistency_scores = analytics.compute_team_strength(selected_weeks)
+    
     # Show any data issues
     if missing_weeks:
         with st.expander("Data Issues"):
@@ -779,7 +884,12 @@ def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
                 st.warning(issue)
     
     # Create tabs
-    tab_heatmap, tab_data = st.tabs(["📊 Rankings Heatmap", "📋 Raw Data"])
+    tab_heatmap, tab_strength, tab_z_scores, tab_data = st.tabs([
+        "📊 Rankings Heatmap", 
+        "💪 Team Strength", 
+        "📈 Z-Score Analysis", 
+        "📋 Raw Data"
+    ])
     
     with tab_heatmap:
         st.header("Team Rankings by Stat Category")
@@ -791,9 +901,87 @@ def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
             "**Note:** OPS, ERA, and WHIP are averaged; other stats are totals."
         )
     
+    with tab_strength:
+        st.header("Team Strength Analysis")
+        
+        if not strength_scores.empty:
+            # Overall strength score (mean of all z-scores)
+            overall_strength = strength_scores.mean(axis=1).sort_values(ascending=False)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Overall Team Strength")
+                st.write("*Based on average z-scores across all categories*")
+                
+                for i, (team, score) in enumerate(overall_strength.head(10).items()):
+                    if i < 3:
+                        medal = ["🥇", "🥈", "🥉"][i]
+                        st.write(f"{medal} **{team}**: {score:.2f}")
+                    else:
+                        st.write(f"{i+1}. {team}: {score:.2f}")
+            
+            with col2:
+                st.subheader("Category Leaders")
+                for category in analytics.WANTED_COLS:
+                    if category in strength_scores.columns:
+                        leader = strength_scores[category].idxmax()
+                        score = strength_scores[category].max()
+                        st.write(f"**{category}**: {leader} ({score:.2f})")
+            
+            # Consistency analysis
+            st.subheader("Team Consistency")
+            st.write("*Lower values indicate more consistent performance*")
+            
+            if not consistency_scores.empty:
+                overall_consistency = consistency_scores.mean(axis=1).sort_values()
+                
+                consistency_df = pd.DataFrame({
+                    'Team': overall_consistency.index,
+                    'Consistency Score': overall_consistency.values,
+                    'Rating': ['Very Consistent' if x < 0.5 else 'Consistent' if x < 1.0 else 'Variable' if x < 1.5 else 'Inconsistent' for x in overall_consistency.values]
+                })
+                
+                st.dataframe(consistency_df, use_container_width=True)
+        else:
+            st.warning("Not enough data for strength analysis.")
+    
+    with tab_z_scores:
+        st.header("Z-Score Analysis")
+        
+        if not strength_scores.empty:
+            st.write("**Z-scores show how many standard deviations above/below league average each team performs in each category.**")
+            st.write("- Green (positive): Above average performance")
+            st.write("- Red (negative): Below average performance")
+            
+            fig_z = analytics.create_z_score_heatmap(strength_scores)
+            st.pyplot(fig_z, use_container_width=True)
+            
+            # Z-score interpretation
+            with st.expander("Z-Score Interpretation"):
+                st.write("""
+                - **Z > 1.5**: Excellent (top 7% of league)
+                - **0.5 < Z < 1.5**: Good (top 30% of league)
+                - **-0.5 < Z < 0.5**: Average (middle 40% of league)
+                - **-1.5 < Z < -0.5**: Below Average (bottom 30% of league)
+                - **Z < -1.5**: Poor (bottom 7% of league)
+                """)
+        else:
+            st.warning("Not enough data for z-score analysis.")
+    
     with tab_data:
         st.header("Raw Statistics")
-        st.dataframe(df_total.round(3))
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Cumulative Stats")
+            st.dataframe(df_total.round(3))
+        
+        with col2:
+            if not strength_scores.empty:
+                st.subheader("Z-Score Strength")
+                st.dataframe(strength_scores.round(3))
 
 def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
     """Render football analytics"""
