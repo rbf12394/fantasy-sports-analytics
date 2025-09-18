@@ -883,32 +883,8 @@ class FootballAnalytics:
                 st.warning("No starter data found for selected weeks.")
                 return None, pd.DataFrame()
         
-        # Debug: Show what we're aggregating
-        st.write("**Debug - Raw data for DEF position:**")
-        if 'DEF' in df['Position'].values:
-            def_data = df[df['Position'] == 'DEF'][['Team', 'Player', 'Position', 'Points', 'Week', 'Is_Starter']]
-            st.dataframe(def_data)
-            
-            # Show the Points values being summed
-            st.write("**Points being summed for each team's DEF:**")
-            for team in def_data['Team'].unique():
-                team_def = def_data[def_data['Team'] == team]
-                points_list = team_def['Points'].tolist()
-                total = sum(points_list)
-                st.write(f"- {team}: {points_list} = {total}")
-        else:
-            st.write("No DEF players found")
-            sample_debug = df.head(10)[['Team', 'Player', 'Position', 'Points', 'Week']]
-            st.dataframe(sample_debug)
-        
         # Aggregate by team and position - sum points across all weeks
         totals = df.groupby(["Team", "Position"])["Points"].sum().reset_index()
-        
-        # Debug: Show aggregation results for DEF
-        st.write("**Debug - Final aggregated totals for DEF:**")
-        if 'DEF' in totals['Position'].values:
-            def_totals = totals[totals['Position'] == 'DEF']
-            st.dataframe(def_totals)
         
         pivot = totals.pivot(index="Team", columns="Position", values="Points").fillna(0)
         
@@ -1236,13 +1212,13 @@ def render_landing_page(auth_url: str):
     <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
     """, unsafe_allow_html=True)
     
-    # Yahoo Fantasy Sports button (centered) - keeping original working approach
+    # Yahoo Fantasy Sports button with better fallbacks
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        # Create clickable Yahoo button that redirects
         if st.button("Connect with Yahoo Fantasy", type="primary", key="yahoo_connect"):
             st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
             st.success("Redirecting to Yahoo...")
+            st.markdown(f"**If you're not redirected automatically, [click here]({auth_url})**")
     
     st.markdown("""
     <p style="color: white; text-align: center; margin-top: 20px; opacity: 0.9;">
@@ -1333,34 +1309,51 @@ def render_sidebar():
         """)
 
 def handle_authentication():
-    """Handle OAuth authentication"""
+    """Enhanced authentication handler with better error handling"""
     auth = YahooAuth()
     
+    # Check if we have a token and if it's still valid
     if st.session_state.token:
-        # Test if token is still valid
         try:
             test_url = f"{config.FANTASY_BASE_URL}/users;use_login=1"
             response = auth.make_api_request(test_url, st.session_state.token)
             if response.status_code == 200:
                 return True, st.session_state.token, None
-        except Exception:
-            pass
+            else:
+                st.sidebar.warning(f"Token invalid (Status: {response.status_code})")
+        except Exception as e:
+            st.sidebar.error(f"Token test failed: {e}")
     
-    # Check for auth code in URL
+    # Check for auth code in URL parameters
     query_params = st.query_params.to_dict()
+    
     if "code" in query_params:
         try:
             code = query_params["code"]
+            st.sidebar.info(f"Processing auth code: {code[:10]}...")
+            
+            # Exchange code for token
             token = auth.exchange_code_for_token(code)
             st.session_state.token = token
+            st.sidebar.success("Token exchange successful!")
             st.rerun()
         except Exception as e:
-            return False, None, f"Authentication failed: {str(e)}"
+            error_msg = f"Token exchange failed: {str(e)}"
+            st.sidebar.error(error_msg)
+            # Log more details about the error
+            if hasattr(e, 'response'):
+                st.sidebar.error(f"Response status: {e.response.status_code}")
+            return False, None, error_msg
     
-    # Need to authenticate
+    # If we get here, we need to authenticate
     if not st.session_state.token:
-        auth_url = auth.get_auth_url()
-        return False, None, auth_url
+        try:
+            auth_url = auth.get_auth_url()
+            return False, None, auth_url
+        except Exception as e:
+            error_msg = f"Auth URL generation failed: {str(e)}"
+            st.sidebar.error(error_msg)
+            return False, None, error_msg
     
     return True, st.session_state.token, None
 
