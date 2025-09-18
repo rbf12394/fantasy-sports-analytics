@@ -1236,26 +1236,13 @@ def render_landing_page(auth_url: str):
     <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
     """, unsafe_allow_html=True)
     
-    # Create a proper hyperlink instead of button redirect
-    st.markdown(f"""
-    <div style="text-align: center; margin: 30px 0;">
-        <a href="{auth_url}" target="_self" style="
-            background: #ffffff;
-            color: #6B46C1;
-            padding: 12px 32px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 16px;
-            display: inline-block;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            transition: all 0.3s ease;
-        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)';" 
-           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)';">
-            🔗 Connect with Yahoo Fantasy
-        </a>
-    </div>
-    """, unsafe_allow_html=True)
+    # Yahoo Fantasy Sports button (centered) - keeping original working approach
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        # Create clickable Yahoo button that redirects
+        if st.button("Connect with Yahoo Fantasy", type="primary", key="yahoo_connect"):
+            st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
+            st.success("Redirecting to Yahoo...")
     
     st.markdown("""
     <p style="color: white; text-align: center; margin-top: 20px; opacity: 0.9;">
