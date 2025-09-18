@@ -796,7 +796,7 @@ class FootballAnalytics:
         return self.POSITION_MAPPING.get(position, position)
     
     def create_positional_heatmap(self, data: List[Dict], starters_only: bool = False) -> Tuple[plt.Figure, pd.DataFrame]:
-        """Create positional heatmap with starter/bench filtering"""
+        """Create positional heatmap with starter/bench filtering and ranking-based colors"""
         if not data:
             return None, pd.DataFrame()
         
@@ -817,38 +817,78 @@ class FootballAnalytics:
         team_totals = pivot.sum(axis=1).sort_values(ascending=False)
         pivot_sorted = pivot.loc[team_totals.index]
         
+        # Create ranking for each position column
+        rankings = {}
+        for col in pivot_sorted.columns:
+            rankings[col] = pivot_sorted[col].rank(ascending=False, method='min')
+        
         # Create figure
         fig, ax = plt.subplots(
             figsize=(max(10, len(pivot.columns) * 1.2), max(6, len(pivot.index) * 0.5))
         )
         
-        # Create heatmap
-        im = ax.imshow(pivot_sorted.values, cmap="RdYlGn", aspect='auto')
+        # Function to get color based on ranking
+        def get_color_by_rank(rank, num_teams):
+            if rank <= 3:
+                return 'lightgreen'  # Top 3
+            elif rank <= num_teams - 3:
+                return 'khaki'  # Middle teams
+            else:
+                return 'lightcoral'  # Bottom 3
         
-        # Labels
-        ax.set_xticks(range(len(pivot_sorted.columns)))
-        ax.set_xticklabels(pivot_sorted.columns, fontsize=11, weight='bold')
-        ax.set_yticks(range(len(pivot_sorted.index)))
-        ax.set_yticklabels(pivot_sorted.index, fontsize=10)
+        num_teams = len(pivot_sorted.index)
         
-        # Add value annotations
-        max_val = pivot_sorted.values.max() if pivot_sorted.values.size > 0 else 0
+        # Draw heatmap cells with ranking-based colors
         for i in range(len(pivot_sorted.index)):
             for j in range(len(pivot_sorted.columns)):
                 value = pivot_sorted.iloc[i, j]
+                position = pivot_sorted.columns[j]
+                rank = rankings[position].iloc[i]
+                
+                # Get color based on ranking
+                color = get_color_by_rank(rank, num_teams)
+                
+                # Draw cell
+                ax.add_patch(plt.Rectangle((j, i), 1, 1, fill=True, color=color, edgecolor='white', linewidth=1))
+                
+                # Add text
                 if value > 0:
-                    color = 'white' if max_val > 0 and value > max_val/2 else 'black'
-                    ax.text(j, i, f"{value:.1f}", ha='center', va='center', 
-                           color=color, weight='bold', fontsize=9)
+                    text_color = 'black'
+                    ax.text(j + 0.5, i + 0.5, f"{value:.1f}", ha='center', va='center', 
+                           color=text_color, weight='bold', fontsize=9)
+                else:
+                    ax.text(j + 0.5, i + 0.5, "0.0", ha='center', va='center', 
+                           color='gray', fontsize=8)
         
-        # Formatting
-        plt.colorbar(im, ax=ax, label='Fantasy Points')
+        # Set axis properties
+        ax.set_xlim(0, len(pivot_sorted.columns))
+        ax.set_ylim(0, len(pivot_sorted.index))
+        ax.invert_yaxis()
+        
+        # Labels
+        ax.set_xticks([x + 0.5 for x in range(len(pivot_sorted.columns))])
+        ax.set_xticklabels(pivot_sorted.columns, fontsize=11, weight='bold')
+        ax.set_yticks([y + 0.5 for y in range(len(pivot_sorted.index))])
+        ax.set_yticklabels(pivot_sorted.index, fontsize=10)
+        
+        # Remove ticks
+        ax.tick_params(left=False, bottom=False)
         
         # Dynamic title
-        title = "Starting Lineup Fantasy Points" if starters_only else "Total Roster Fantasy Points"
+        title = "Starting Lineup Fantasy Points by Position" if starters_only else "Total Roster Fantasy Points by Position"
         plt.title(title, fontsize=14, weight='bold', pad=15)
         plt.xlabel("Position", fontsize=12, weight='bold')
         plt.ylabel("Team", fontsize=12, weight='bold')
+        
+        # Add legend
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='lightgreen', label='Top 3 Teams'),
+            Patch(facecolor='khaki', label='Middle Teams'), 
+            Patch(facecolor='lightcoral', label='Bottom 3 Teams')
+        ]
+        ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1))
+        
         plt.tight_layout()
         
         return fig, pivot_sorted
