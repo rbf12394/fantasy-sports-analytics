@@ -109,9 +109,19 @@ class YahooAuth:
     """Handle Yahoo OAuth and API requests"""
     
     def get_auth_url(self) -> str:
-        """Get authorization URL"""
-        oauth = OAuth2Session(config.CLIENT_ID, redirect_uri=config.REDIRECT_URI)
-        auth_url, state = oauth.authorization_url(config.AUTH_URL)
+        """Get authorization URL with proper parameters"""
+        # Build the auth URL manually to ensure proper parameters
+        params = {
+            'client_id': config.CLIENT_ID,
+            'redirect_uri': config.REDIRECT_URI,
+            'response_type': 'code',
+            'scope': 'openid'
+        }
+        
+        # Build query string manually
+        query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+        auth_url = f"{config.AUTH_URL}?{query_string}"
+        
         return auth_url
     
     def exchange_code_for_token(self, code: str) -> Dict:
@@ -1174,7 +1184,7 @@ def render_landing_page(auth_url: str):
                 margin: 10px 0;
             ">
                 <div style="text-align: center;">
-                    <div style="font-size: 48px; margin-bottom: 8px;">🐕</div>
+                    <div style="font-size: 48px; margin-bottom: 8px;">🏆</div>
                     <div style="color: white; font-weight: bold; font-size: 14px;">SKIPPER</div>
                 </div>
             </div>
