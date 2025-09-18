@@ -1224,7 +1224,7 @@ def render_landing_page(auth_url: str):
         
         # Try to display your custom logo
         try:
-            st.image("skipper_logo.png", width=300)
+            st.image("skipper_logo.png", width=500)
         except:
             # Fallback if logo file not found
             st.markdown("""
@@ -1371,7 +1371,7 @@ def render_sidebar():
     with st.sidebar:
         # Logo in sidebar
         try:
-            st.image("skipper_logo.png", width=180)
+            st.image("skipper_logo.png", width=200)
         except:
             st.markdown("🐕 **Skipper Analytics**")
         
