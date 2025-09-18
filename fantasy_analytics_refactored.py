@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fantasy Sports Analytics Suite - Clean Working Version
-Simplified football analytics with proper debugging
+Fantasy Sports Analytics Suite - Complete Working Version
+Uses the player stats API endpoint for accurate weekly fantasy points
 """
 
 import streamlit as st
@@ -506,11 +506,11 @@ class BaseballAnalytics:
         return fig
 
 # =============================================================================
-# SIMPLIFIED FOOTBALL ANALYTICS
+# FOOTBALL ANALYTICS USING PLAYER STATS API
 # =============================================================================
 
 class FootballAnalytics:
-    """Football fantasy analytics with proper starter/bench detection"""
+    """Football fantasy analytics using the player stats endpoint approach"""
     
     def __init__(self, league_key: str, oauth_session: OAuth2Session):
         self.league_key = league_key
@@ -612,7 +612,7 @@ class FootballAnalytics:
     
     @st.cache_data(ttl=config.CACHE_TTL)
     def get_roster_data(_self, week: int) -> List[Dict]:
-        """Get roster data for all teams with starter/bench info and fantasy points"""
+        """Get roster data for all teams with weekly stats"""
         team_keys = _self.get_team_keys()
         if not team_keys:
             return []
@@ -620,21 +620,24 @@ class FootballAnalytics:
         all_player_data = []
         
         for team_key, team_name in team_keys:
-            # Step 1: Get roster structure (starter/bench info)
-            roster_data = _self._get_team_roster_structure(team_key, team_name, week)
+            # Step 1: Get roster structure (positions, starter/bench)
+            roster_info = _self._get_team_roster_info(team_key, team_name, week)
             
-            # Step 2: Get fantasy points separately 
-            points_data = _self._get_team_fantasy_points(team_key, team_name, week)
+            # Step 2: Get player keys from roster
+            player_keys = [p["player_key"] for p in roster_info if p.get("player_key")]
             
-            # Step 3: Merge the data
-            merged_data = _self._merge_roster_and_points(roster_data, points_data)
-            
-            all_player_data.extend(merged_data)
+            # Step 3: Get weekly stats for all players in batches
+            if player_keys:
+                player_stats = _self._get_players_weekly_stats(player_keys, week)
+                
+                # Step 4: Merge roster info with stats
+                merged_data = _self._merge_roster_and_weekly_stats(roster_info, player_stats, team_name, week)
+                all_player_data.extend(merged_data)
         
         return all_player_data
     
-    def _get_team_roster_structure(self, team_key: str, team_name: str, week: int) -> List[Dict]:
-        """Get just the roster structure (positions, starter/bench status)"""
+    def _get_team_roster_info(self, team_key: str, team_name: str, week: int) -> List[Dict]:
+        """Get basic roster info (positions, starter/bench status)"""
         roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
         
         try:
@@ -643,22 +646,49 @@ class FootballAnalytics:
                 return []
             
             root = ET.fromstring(resp.text)
-            roster_data = []
+            roster_info = []
             
             for player in root.findall('.//y:player', config.YAHOO_NS):
-                player_info = self._extract_basic_roster_info(player, team_name, week)
-                if player_info:
-                    roster_data.append(player_info)
+                # Extract basic roster information
+                player_key_el = player.find('y:player_key', config.YAHOO_NS)
+                if player_key_el is None:
+                    continue
+                    
+                name_el = player.find('y:name/y:full', config.YAHOO_NS)
+                if name_el is None:
+                    name_el = player.find('y:name', config.YAHOO_NS)
+                
+                selected_pos_el = player.find('y:selected_position/y:position', config.YAHOO_NS)
+                if selected_pos_el is None:
+                    selected_pos_el = player.find('y:selected_position', config.YAHOO_NS)
+                
+                pos_el = player.find('y:display_position', config.YAHOO_NS)
+                if pos_el is None:
+                    pos_el = player.find('y:eligible_positions/y:position', config.YAHOO_NS)
+                
+                player_info = {
+                    "player_key": player_key_el.text,
+                    "player_name": name_el.text if name_el is not None else "Unknown",
+                    "selected_position": selected_pos_el.text if selected_pos_el is not None else "Unknown",
+                    "display_position": pos_el.text if pos_el is not None else "Unknown"
+                }
+                
+                roster_info.append(player_info)
             
-            return roster_data
+            return roster_info
             
         except Exception:
             return []
     
-    def _get_team_fantasy_points(self, team_key: str, team_name: str, week: int) -> Dict[str, float]:
-        """Get fantasy points for all players on a team"""
-        # Try the players/stats endpoint for this team and week
-        stats_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/players/stats;week={week}"
+    def _get_players_weekly_stats(self, player_keys: List[str], week: int) -> Dict[str, float]:
+        """Get weekly stats for multiple players using the player stats endpoint"""
+        if not player_keys:
+            return {}
+        
+        # Yahoo API can handle multiple player keys in one request
+        # Format: player_keys=key1,key2,key3
+        player_keys_str = ",".join(player_keys)
+        stats_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={week}"
         
         try:
             resp = self.oauth.get(stats_url)
@@ -666,98 +696,55 @@ class FootballAnalytics:
                 return {}
             
             root = ET.fromstring(resp.text)
-            points_dict = {}
+            player_stats = {}
             
             for player in root.findall('.//y:player', config.YAHOO_NS):
-                # Get player identifier
                 player_key_el = player.find('y:player_key', config.YAHOO_NS)
                 if player_key_el is None:
                     continue
                 
                 player_key = player_key_el.text
                 
-                # Get fantasy points
-                points = self._extract_fantasy_points_from_stats(player)
-                points_dict[player_key] = points
+                # Extract fantasy points from stats
+                points = self._extract_fantasy_points_from_player_stats(player)
+                player_stats[player_key] = points
             
-            return points_dict
+            return player_stats
             
-        except Exception:
-            return {}
+        except Exception as e:
+            # Fallback: try individual requests if batch fails
+            return self._get_players_weekly_stats_individual(player_keys, week)
     
-    def _extract_basic_roster_info(self, player_element, team_name: str, week: int) -> Optional[Dict]:
-        """Extract basic roster info without fantasy points"""
-        # Get player key for matching
-        player_key_el = player_element.find('y:player_key', config.YAHOO_NS)
-        if player_key_el is None:
-            return None
-        player_key = player_key_el.text
+    def _get_players_weekly_stats_individual(self, player_keys: List[str], week: int) -> Dict[str, float]:
+        """Fallback: get stats for players individually if batch request fails"""
+        player_stats = {}
         
-        # Get player name
-        name_el = player_element.find('y:name/y:full', config.YAHOO_NS)
-        if name_el is None:
-            name_el = player_element.find('y:name', config.YAHOO_NS)
-        player_name = name_el.text if name_el is not None else "Unknown"
+        for player_key in player_keys[:10]:  # Limit to avoid rate limits
+            try:
+                stats_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_key}/stats;week={week}"
+                resp = self.oauth.get(stats_url)
+                
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.text)
+                    player = root.find('.//y:player', config.YAHOO_NS)
+                    if player is not None:
+                        points = self._extract_fantasy_points_from_player_stats(player)
+                        player_stats[player_key] = points
+                        
+            except Exception:
+                continue
         
-        # Get selected_position (starter vs bench)
-        selected_pos_el = player_element.find('y:selected_position/y:position', config.YAHOO_NS)
-        if selected_pos_el is None:
-            selected_pos_el = player_element.find('y:selected_position', config.YAHOO_NS)
-        
-        selected_position = selected_pos_el.text if selected_pos_el is not None else "Unknown"
-        
-        # Determine if starter or bench
-        is_starter = selected_position not in ['BN', 'IR', 'DL'] and selected_position != "Unknown"
-        
-        # Get player's natural position
-        pos_el = player_element.find('y:display_position', config.YAHOO_NS)
-        if pos_el is None:
-            pos_el = player_element.find('y:eligible_positions/y:position', config.YAHOO_NS)
-        natural_position = pos_el.text if pos_el is not None else selected_position
-        
-        return {
-            "Player_Key": player_key,
-            "Team": team_name,
-            "Player": player_name,
-            "Position": self._clean_position(natural_position),
-            "Selected_Position": selected_position,
-            "Is_Starter": is_starter,
-            "Week": week
-        }
+        return player_stats
     
-    def _merge_roster_and_points(self, roster_data: List[Dict], points_data: Dict[str, float]) -> List[Dict]:
-        """Merge roster structure with fantasy points data"""
-        merged_data = []
-        
-        for player_info in roster_data:
-            player_key = player_info.get("Player_Key", "")
-            points = points_data.get(player_key, 0.0)
-            
-            # Add points to the player info
-            player_info["Points"] = points
-            
-            # Remove the player_key since it's just for matching
-            if "Player_Key" in player_info:
-                del player_info["Player_Key"]
-            
-            merged_data.append(player_info)
-        
-        return merged_data
-    
-    def _extract_fantasy_points_from_stats(self, player_element) -> float:
-        """Extract fantasy points from player stats section"""
-        # Look for player_stats section
-        player_stats = player_element.find('y:player_stats', config.YAHOO_NS)
-        if player_stats is None:
-            return 0.0
-        
-        # Try to find player_points
-        points_el = player_stats.find('.//y:player_points/y:total', config.YAHOO_NS)
+    def _extract_fantasy_points_from_player_stats(self, player_element) -> float:
+        """Extract fantasy points from player stats XML"""
+        # Method 1: Look for player_points
+        points_el = player_element.find('.//y:player_points/y:total', config.YAHOO_NS)
         if points_el is not None and points_el.text:
             return safe_float(points_el.text)
         
-        # Try to find stats with stat_id="0" (often fantasy points)
-        stats = player_stats.findall('.//y:stats/y:stat', config.YAHOO_NS)
+        # Method 2: Look for stats section with fantasy points (stat_id="0")
+        stats = player_element.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
         for stat in stats:
             stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
             stat_value_el = stat.find('y:value', config.YAHOO_NS)
@@ -766,7 +753,42 @@ class FootballAnalytics:
                 stat_id_el.text == "0"):
                 return safe_float(stat_value_el.text)
         
+        # Method 3: Look for any stats with reasonable point values
+        for stat in stats:
+            stat_value_el = stat.find('y:value', config.YAHOO_NS)
+            if stat_value_el is not None and stat_value_el.text:
+                value = safe_float(stat_value_el.text)
+                if 0 <= value <= 100:  # Reasonable fantasy points range
+                    return value
+        
         return 0.0
+    
+    def _merge_roster_and_weekly_stats(self, roster_info: List[Dict], player_stats: Dict[str, float], 
+                                     team_name: str, week: int) -> List[Dict]:
+        """Merge roster information with weekly stats"""
+        merged_data = []
+        
+        for player_info in roster_info:
+            player_key = player_info["player_key"]
+            points = player_stats.get(player_key, 0.0)
+            
+            # Determine if player is starter or bench
+            selected_pos = player_info["selected_position"]
+            is_starter = selected_pos not in ['BN', 'IR', 'DL'] and selected_pos != "Unknown"
+            
+            merged_player = {
+                "Team": team_name,
+                "Player": player_info["player_name"],
+                "Position": self._clean_position(player_info["display_position"]),
+                "Selected_Position": selected_pos,
+                "Is_Starter": is_starter,
+                "Week": week,
+                "Points": points
+            }
+            
+            merged_data.append(merged_player)
+        
+        return merged_data
     
     def _clean_position(self, position: str) -> str:
         """Clean position name"""
@@ -810,12 +832,12 @@ class FootballAnalytics:
         ax.set_yticklabels(pivot_sorted.index, fontsize=10)
         
         # Add value annotations
-        max_val = pivot_sorted.values.max()
+        max_val = pivot_sorted.values.max() if pivot_sorted.values.size > 0 else 0
         for i in range(len(pivot_sorted.index)):
             for j in range(len(pivot_sorted.columns)):
                 value = pivot_sorted.iloc[i, j]
                 if value > 0:
-                    color = 'white' if value > max_val/2 else 'black'
+                    color = 'white' if max_val > 0 and value > max_val/2 else 'black'
                     ax.text(j, i, f"{value:.1f}", ha='center', va='center', 
                            color=color, weight='bold', fontsize=9)
         
@@ -831,89 +853,131 @@ class FootballAnalytics:
         
         return fig, pivot_sorted
     
-    def debug_step_by_step(self, team_key: str, team_name: str, week: int) -> Dict:
-        """Debug each step of the data extraction process"""
+    def debug_player_stats_endpoint(self, sample_player_key: str, week: int) -> Dict:
+        """Debug the player stats endpoint to see what data is available"""
+        
+        # Test the endpoint you found
+        stats_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={sample_player_key}/stats;week={week}"
+        
         results = {
-            "step1_roster": None,
-            "step2_stats": None,
-            "step3_merged": None,
-            "errors": []
+            "endpoint_url": stats_url,
+            "status_code": None,
+            "success": False,
+            "xml_tags": [],
+            "player_data": {},
+            "raw_xml": ""
         }
         
-        # Step 1: Test roster endpoint
         try:
-            roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
-            resp = self.oauth.get(roster_url)
-            results["step1_roster"] = {
-                "url": roster_url,
-                "status": resp.status_code,
-                "success": resp.status_code == 200,
-                "response_preview": resp.text[:1000] if resp.status_code == 200 else resp.text[:500]
-            }
-            
-            if resp.status_code == 200:
-                roster_data = self._get_team_roster_structure(team_key, team_name, week)
-                results["step1_roster"]["extracted_players"] = len(roster_data)
-                results["step1_roster"]["sample_data"] = roster_data[:3] if roster_data else []
-                
-        except Exception as e:
-            results["errors"].append(f"Step 1 error: {str(e)}")
-        
-        # Step 2: Test stats endpoint
-        try:
-            stats_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/players/stats;week={week}"
             resp = self.oauth.get(stats_url)
-            results["step2_stats"] = {
-                "url": stats_url,
-                "status": resp.status_code,
-                "success": resp.status_code == 200,
-                "response_preview": resp.text[:1000] if resp.status_code == 200 else resp.text[:500]
-            }
+            results["status_code"] = resp.status_code
+            results["success"] = resp.status_code == 200
+            results["raw_xml"] = resp.text[:2000]  # First 2000 chars
             
             if resp.status_code == 200:
-                points_data = self._get_team_fantasy_points(team_key, team_name, week)
-                results["step2_stats"]["extracted_points"] = len(points_data)
-                results["step2_stats"]["sample_points"] = dict(list(points_data.items())[:3]) if points_data else {}
+                root = ET.fromstring(resp.text)
                 
-        except Exception as e:
-            results["errors"].append(f"Step 2 error: {str(e)}")
-        
-        # Step 3: Test merging
-        try:
-            if results["step1_roster"] and results["step2_stats"]:
-                roster_data = self._get_team_roster_structure(team_key, team_name, week)
-                points_data = self._get_team_fantasy_points(team_key, team_name, week)
-                merged = self._merge_roster_and_points(roster_data, points_data)
+                # Get all XML tags
+                all_tags = set()
+                for elem in root.iter():
+                    if elem.tag:
+                        tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                        all_tags.add(tag)
+                results["xml_tags"] = sorted(list(all_tags))
                 
-                results["step3_merged"] = {
-                    "merged_players": len(merged),
-                    "sample_merged": merged[:3] if merged else [],
-                    "points_found": sum(1 for p in merged if p.get("Points", 0) > 0)
-                }
+                # Extract player data
+                player = root.find('.//y:player', config.YAHOO_NS)
+                if player is not None:
+                    player_data = {}
+                    
+                    # Get basic info
+                    name_el = player.find('y:name/y:full', config.YAHOO_NS)
+                    if name_el is not None:
+                        player_data["name"] = name_el.text
+                    
+                    # Get all stats
+                    stats = player.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
+                    stats_dict = {}
+                    for stat in stats:
+                        stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
+                        stat_value_el = stat.find('y:value', config.YAHOO_NS)
+                        if stat_id_el is not None and stat_value_el is not None:
+                            stats_dict[stat_id_el.text] = stat_value_el.text
+                    player_data["stats"] = stats_dict
+                    
+                    # Look for player_points
+                    points_el = player.find('.//y:player_points/y:total', config.YAHOO_NS)
+                    if points_el is not None:
+                        player_data["player_points"] = points_el.text
+                    
+                    results["player_data"] = player_data
+                    
         except Exception as e:
-            results["errors"].append(f"Step 3 error: {str(e)}")
+            results["error"] = str(e)
         
         return results
     
-    def debug_single_endpoint(self, team_key: str, week: int, endpoint_url: str) -> Dict:
-        """Debug a single API endpoint"""
-        try:
-            resp = self.oauth.get(endpoint_url)
-            return {
-                "url": endpoint_url,
-                "status_code": resp.status_code,
-                "response_length": len(resp.text),
-                "response_text": resp.text[:3000] + "..." if len(resp.text) > 3000 else resp.text,
-                "success": resp.status_code == 200
-            }
-        except Exception as e:
-            return {
-                "url": endpoint_url,
-                "status_code": "ERROR",
-                "response_length": 0,
-                "response_text": f"Exception: {str(e)}",
-                "success": False
-            }
+    def test_batch_vs_individual_stats(self, player_keys: List[str], week: int) -> Dict:
+        """Test batch vs individual player stats requests"""
+        results = {
+            "batch_request": None,
+            "individual_requests": [],
+            "comparison": {}
+        }
+        
+        # Test batch request
+        if len(player_keys) > 1:
+            player_keys_str = ",".join(player_keys[:5])  # Test with first 5 players
+            batch_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={week}"
+            
+            try:
+                resp = self.oauth.get(batch_url)
+                results["batch_request"] = {
+                    "url": batch_url,
+                    "status_code": resp.status_code,
+                    "success": resp.status_code == 200,
+                    "player_count": len(player_keys[:5]),
+                    "response_length": len(resp.text)
+                }
+                
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.text)
+                    players_found = len(root.findall('.//y:player', config.YAHOO_NS))
+                    results["batch_request"]["players_in_response"] = players_found
+                    
+            except Exception as e:
+                results["batch_request"] = {"error": str(e)}
+        
+        # Test individual requests
+        for i, player_key in enumerate(player_keys[:3]):  # Test first 3 individually
+            individual_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_key}/stats;week={week}"
+            
+            try:
+                resp = self.oauth.get(individual_url)
+                individual_result = {
+                    "player_key": player_key,
+                    "url": individual_url,
+                    "status_code": resp.status_code,
+                    "success": resp.status_code == 200,
+                    "response_length": len(resp.text)
+                }
+                
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.text)
+                    player = root.find('.//y:player', config.YAHOO_NS)
+                    if player is not None:
+                        points = self._extract_fantasy_points_from_player_stats(player)
+                        individual_result["fantasy_points"] = points
+                
+                results["individual_requests"].append(individual_result)
+                
+            except Exception as e:
+                results["individual_requests"].append({
+                    "player_key": player_key,
+                    "error": str(e)
+                })
+        
+        return results
 
 # =============================================================================
 # MAIN APPLICATION
@@ -1292,7 +1356,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
     
     with tab_debug:
         st.header("Yahoo Fantasy API Debug Tool")
-        st.write("Debug roster data extraction and examine API responses.")
+        st.write("Debug the new player stats endpoint approach.")
         
         # Get team keys
         team_keys = analytics.get_team_keys()
@@ -1305,95 +1369,192 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
             
             debug_week = st.selectbox("Select week:", available_weeks)
             
+            team_key = selected_team.split("(")[1].rstrip(")")
+            team_name = selected_team.split(" (")[0]
+            
+            # Step 1: Get roster info to extract player keys
+            if st.button("Step 1: Get Roster Info"):
+                st.subheader("Step 1: Roster Information")
+                
+                roster_info = analytics._get_team_roster_info(team_key, team_name, debug_week)
+                
+                if roster_info:
+                    st.success(f"✅ Found {len(roster_info)} players on roster")
+                    
+                    # Show sample roster data
+                    st.write("**Sample roster data:**")
+                    df = pd.DataFrame(roster_info[:10])
+                    st.dataframe(df)
+                    
+                    # Extract player keys for next step
+                    player_keys = [p["player_key"] for p in roster_info if p.get("player_key")]
+                    st.write(f"**Player keys extracted:** {len(player_keys)}")
+                    
+                    # Store in session state for next steps
+                    st.session_state['debug_player_keys'] = player_keys
+                    st.session_state['debug_roster_info'] = roster_info
+                    
+                    # Show a few sample player keys
+                    st.write("**Sample player keys:**")
+                    for key in player_keys[:5]:
+                        st.code(key)
+                else:
+                    st.error("❌ No roster data found")
+            
+            # Step 2: Test player stats endpoint
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("Step-by-Step Debug"):
-                    team_key = selected_team.split("(")[1].rstrip(")")
-                    team_name = selected_team.split(" (")[0]
-                    
-                    results = analytics.debug_step_by_step(team_key, team_name, debug_week)
-                    
-                    st.subheader("Debug Results")
-                    
-                    # Step 1 results
-                    if results["step1_roster"]:
-                        st.write("**Step 1: Roster Endpoint**")
-                        step1 = results["step1_roster"]
-                        if step1["success"]:
-                            st.success(f"✅ Status {step1['status']}")
-                            st.write(f"Extracted {step1.get('extracted_players', 0)} players")
-                            if step1.get('sample_data'):
-                                st.json(step1['sample_data'])
+                if st.button("Step 2: Test Single Player Stats"):
+                    if 'debug_player_keys' in st.session_state and st.session_state['debug_player_keys']:
+                        st.subheader("Step 2: Single Player Stats Test")
+                        
+                        # Test with first player
+                        test_player_key = st.session_state['debug_player_keys'][0]
+                        
+                        results = analytics.debug_player_stats_endpoint(test_player_key, debug_week)
+                        
+                        st.write(f"**Testing player:** {test_player_key}")
+                        st.write(f"**Endpoint:** {results['endpoint_url']}")
+                        
+                        if results['success']:
+                            st.success(f"✅ Status {results['status_code']}")
+                            
+                            # Show player data found
+                            if results.get('player_data'):
+                                player_data = results['player_data']
+                                st.write("**Player found:**")
+                                st.write(f"- Name: {player_data.get('name', 'N/A')}")
+                                st.write(f"- Fantasy Points: {player_data.get('player_points', 'N/A')}")
+                                
+                                if player_data.get('stats'):
+                                    st.write("**Individual stats:**")
+                                    stats_df = pd.DataFrame(list(player_data['stats'].items()), 
+                                                          columns=['Stat ID', 'Value'])
+                                    st.dataframe(stats_df)
+                            
+                            # Show XML tags found
+                            if results.get('xml_tags'):
+                                with st.expander("XML Tags Found"):
+                                    tags_of_interest = [tag for tag in results['xml_tags'] 
+                                                      if any(keyword in tag.lower() for keyword in 
+                                                           ['point', 'stat', 'player'])]
+                                    st.write("**Tags of interest:**")
+                                    for tag in tags_of_interest:
+                                        st.code(tag)
+                            
+                            with st.expander("Raw XML Response"):
+                                st.text(results.get('raw_xml', 'No XML data'))
                         else:
-                            st.error(f"❌ Failed: {step1['status']}")
-                    
-                    # Step 2 results  
-                    if results["step2_stats"]:
-                        st.write("**Step 2: Stats Endpoint**")
-                        step2 = results["step2_stats"]
-                        if step2["success"]:
-                            st.success(f"✅ Status {step2['status']}")
-                            st.write(f"Found points for {step2.get('extracted_points', 0)} players")
-                            if step2.get('sample_points'):
-                                st.json(step2['sample_points'])
-                        else:
-                            st.error(f"❌ Failed: {step2['status']}")
-                    
-                    # Step 3 results
-                    if results["step3_merged"]:
-                        st.write("**Step 3: Merged Data**")
-                        step3 = results["step3_merged"]
-                        st.success(f"✅ Merged {step3.get('merged_players', 0)} players")
-                        st.write(f"Players with points: {step3.get('points_found', 0)}")
-                        if step3.get('sample_merged'):
-                            st.json(step3['sample_merged'])
-                    
-                    # Show any errors
-                    if results["errors"]:
-                        st.write("**Errors:**")
-                        for error in results["errors"]:
-                            st.error(error)
+                            st.error(f"❌ Failed: Status {results.get('status_code', 'Unknown')}")
+                            if 'error' in results:
+                                st.error(f"Error: {results['error']}")
+                    else:
+                        st.warning("Please run Step 1 first to get player keys")
             
             with col2:
-                if st.button("Test Roster Endpoint"):
-                    team_key = selected_team.split("(")[1].rstrip(")")
-                    roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={debug_week}"
-                    
-                    result = analytics.debug_single_endpoint(team_key, debug_week, roster_url)
-                    
-                    if result["success"]:
-                        st.success(f"✅ Status {result['status_code']}")
+                if st.button("Step 3: Test Batch vs Individual"):
+                    if 'debug_player_keys' in st.session_state and st.session_state['debug_player_keys']:
+                        st.subheader("Step 3: Batch vs Individual Requests")
                         
-                        # Look for key fields
-                        response_text = result["response_text"].lower()
-                        found_fields = []
-                        for field in ["selected_position", "player_points", "position", "roster"]:
-                            if field in response_text:
-                                found_fields.append(field)
+                        player_keys = st.session_state['debug_player_keys']
                         
-                        if found_fields:
-                            st.info(f"Found fields: {', '.join(found_fields)}")
+                        results = analytics.test_batch_vs_individual_stats(player_keys, debug_week)
                         
-                        with st.expander("Full Response"):
-                            st.text(result["response_text"])
+                        # Show batch results
+                        if results.get('batch_request'):
+                            batch = results['batch_request']
+                            st.write("**Batch Request Results:**")
+                            if batch.get('success'):
+                                st.success(f"✅ Batch request successful")
+                                st.write(f"- Requested {batch.get('player_count', 0)} players")
+                                st.write(f"- Found {batch.get('players_in_response', 0)} in response")
+                            else:
+                                st.error(f"❌ Batch request failed: {batch.get('status_code', 'Unknown')}")
+                                if 'error' in batch:
+                                    st.error(f"Error: {batch['error']}")
+                        
+                        # Show individual results
+                        if results.get('individual_requests'):
+                            st.write("**Individual Request Results:**")
+                            for req in results['individual_requests']:
+                                if req.get('success'):
+                                    points = req.get('fantasy_points', 0)
+                                    st.write(f"✅ {req['player_key']}: {points} points")
+                                else:
+                                    st.write(f"❌ {req['player_key']}: Failed")
                     else:
-                        st.error(f"❌ Failed: {result['status_code']}")
-                        st.text(result["response_text"][:500])
+                        st.warning("Please run Step 1 first to get player keys")
+            
+            # Step 4: Full test
+            if st.button("Step 4: Full Integration Test"):
+                st.subheader("Step 4: Full Integration Test")
+                
+                with st.spinner("Testing full data extraction..."):
+                    # Test the complete get_roster_data method
+                    roster_data = analytics.get_roster_data(debug_week)
+                    
+                    if roster_data:
+                        st.success(f"✅ Successfully extracted {len(roster_data)} player records")
+                        
+                        df = pd.DataFrame(roster_data)
+                        
+                        # Analyze results
+                        total_points = df['Points'].sum()
+                        players_with_points = len(df[df['Points'] > 0])
+                        
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.metric("Total Players", len(roster_data))
+                        with col_b:
+                            st.metric("Players with Points", players_with_points)
+                        with col_c:
+                            st.metric("Total Points", f"{total_points:.1f}")
+                        
+                        # Show breakdown by starter/bench
+                        if 'Is_Starter' in df.columns:
+                            starters = df[df['Is_Starter'] == True]
+                            bench = df[df['Is_Starter'] == False]
+                            
+                            st.write("**Starter vs Bench Breakdown:**")
+                            col_d, col_e = st.columns(2)
+                            with col_d:
+                                st.write(f"Starters: {len(starters)} players, {starters['Points'].sum():.1f} points")
+                            with col_e:
+                                st.write(f"Bench: {len(bench)} players, {bench['Points'].sum():.1f} points")
+                        
+                        # Show top scorers
+                        if players_with_points > 0:
+                            st.write("**Top Scorers:**")
+                            top_scorers = df.nlargest(10, 'Points')[['Player', 'Team', 'Position', 'Points', 'Is_Starter']]
+                            st.dataframe(top_scorers)
+                        
+                        # Show sample of all data
+                        with st.expander("Sample Data"):
+                            st.dataframe(df.head(15))
+                    else:
+                        st.error("❌ No data extracted")
             
             # Instructions
-            with st.expander("What to look for in roster data"):
-                st.markdown("""
-                **Key XML elements for roster data:**
-                - `<selected_position>`: Shows if player is starter or bench ("BN")
-                - `<player_points><total>`: Fantasy points for the week
-                - `<display_position>`: Player's natural position (QB, RB, etc.)
-                - `<name><full>`: Player's full name
+            with st.expander("How to use this debug tool"):
+                st.markdown(f"""
+                **Step-by-step debugging process:**
                 
-                **Starter vs Bench logic:**
-                - Starter: selected_position = "QB", "RB", "WR", etc.
-                - Bench: selected_position = "BN"
-                - Inactive: selected_position = "IR", "DL", etc.
+                1. **Get Roster Info**: Extracts player keys and basic roster information
+                2. **Test Single Player**: Tests the player stats endpoint with one player
+                3. **Test Batch vs Individual**: Compares batch requests vs individual requests
+                4. **Full Integration Test**: Tests the complete data extraction pipeline
+                
+                **The new API approach:**
+                
+                Uses endpoint: `{config.FANTASY_BASE_URL}/league/{{league_key}}/players;player_keys={{player_key}}/stats;week={{week}}`
+                
+                This should return weekly fantasy points for players instead of season totals.
+                
+                **What to look for:**
+                - `player_points/total` for fantasy points
+                - `stats` with `stat_id="0"` (often fantasy points)
+                - Individual stat values that could be fantasy points
                 """)
         else:
             st.warning("Could not retrieve team information.")
