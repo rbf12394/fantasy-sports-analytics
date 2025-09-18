@@ -1744,8 +1744,17 @@ def render_landing_page(auth_url: str):
     col1, col2 = st.columns([1, 3])
     
     with col1:
-        # Display the dog mascot logo 
-        st.image("https://i.imgur.com/placeholder.jpg", width=150, caption="")  # You'll need to upload your logo
+        # Display the Skipper dog mascot logo from the uploaded image
+        try:
+            st.image("data:image/png;base64,your_base64_image_here", width=150)
+        except:
+            # Fallback if image not available
+            st.markdown("""
+            <div style="width: 150px; height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        border-radius: 15px; display: flex; align-items: center; justify-content: center;">
+            <span style="font-size: 48px;">🐕</span>
+            </div>
+            """, unsafe_allow_html=True)
         
     with col2:
         st.markdown("""
@@ -1776,21 +1785,29 @@ def render_landing_page(auth_url: str):
     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 padding: 40px; border-radius: 15px; margin: 30px 0px;">
     <div style="text-align: center;">
-    <h3 style="color: white; margin-bottom: 20px;">Connect Your Yahoo Fantasy Account</h3>
+    <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
     """, unsafe_allow_html=True)
     
-    # Yahoo Fantasy Sports logo link (centered)
+    # Yahoo Fantasy Sports logo as clickable button (centered)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
+        # Create clickable Yahoo button that redirects
+        if st.button("Connect with Yahoo Fantasy", type="primary"):
+            st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
+            st.success("Redirecting to Yahoo...")
+        
+        # Also show Yahoo logo as clickable link
         yahoo_logo_html = f"""
-        <div style="text-align: center;">
-        <a href="{auth_url}" target="_self">
+        <div style="text-align: center; margin-top: 20px;">
+        <a href="{auth_url}" style="text-decoration: none;">
+        <div style="background: white; padding: 15px; border-radius: 10px; 
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: inline-block;
+                    transition: transform 0.2s, box-shadow 0.2s;"
+             onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,0,0,0.2)'"
+             onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'">
         <img src="https://s.yimg.com/rz/d/yahoo_sports_en-US_f_p_142x37_2x.png" 
-             style="background: white; padding: 10px; border-radius: 8px; 
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.1); transition: transform 0.2s;"
-             onmouseover="this.style.transform='scale(1.05)'"
-             onmouseout="this.style.transform='scale(1)'"
-             alt="Connect with Yahoo Fantasy Sports">
+             alt="Yahoo Fantasy Sports" style="height: 40px;">
+        </div>
         </a>
         </div>
         """
@@ -1803,48 +1820,6 @@ def render_landing_page(auth_url: str):
     </div>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Features showcase
-    st.markdown("""
-    <h2 style="text-align: center; margin: 50px 0px 30px 0px; color: #333;">
-    What Makes Skipper Analytics Different
-    </h2>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div style="text-align: center; padding: 20px;">
-        <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
-        <h4 style="color: #1f77b4;">Smart Heatmaps</h4>
-        <p style="color: #666; font-size: 14px;">
-        Color-coded positional rankings that instantly show team strengths and weaknesses
-        </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div style="text-align: center; padding: 20px;">
-        <div style="font-size: 48px; margin-bottom: 15px;">⚡</div>
-        <h4 style="color: #1f77b4;">True Weekly Data</h4>
-        <p style="color: #666; font-size: 14px;">
-        Accurate week-by-week analysis, not misleading cumulative totals
-        </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div style="text-align: center; padding: 20px;">
-        <div style="font-size: 48px; margin-bottom: 15px;">🎯</div>
-        <h4 style="color: #1f77b4;">Multi-Sport Ready</h4>
-        <p style="color: #666; font-size: 14px;">
-        Baseball z-score analysis and football positional breakdowns in one app
-        </p>
-        </div>
-        """, unsafe_allow_html=True)
     
     # Sports supported
     st.markdown("---")
