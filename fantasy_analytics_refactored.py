@@ -1744,9 +1744,9 @@ def render_landing_page(auth_url: str):
     col1, col2 = st.columns([1, 3])
     
     with col1:
-        # Display the Skipper dog mascot logo from the uploaded image
+        # Display the Skipper dog mascot logo
         try:
-            st.image("data:image/png;base64,your_base64_image_here", width=150)
+            st.image("skipper_logo.png", width=150)
         except:
             # Fallback if image not available
             st.markdown("""
@@ -1788,30 +1788,13 @@ def render_landing_page(auth_url: str):
     <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
     """, unsafe_allow_html=True)
     
-    # Yahoo Fantasy Sports logo as clickable button (centered)
+    # Yahoo Fantasy Sports button (centered)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         # Create clickable Yahoo button that redirects
-        if st.button("Connect with Yahoo Fantasy", type="primary"):
+        if st.button("Connect with Yahoo Fantasy", type="primary", key="yahoo_connect"):
             st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
             st.success("Redirecting to Yahoo...")
-        
-        # Also show Yahoo logo as clickable link
-        yahoo_logo_html = f"""
-        <div style="text-align: center; margin-top: 20px;">
-        <a href="{auth_url}" style="text-decoration: none;">
-        <div style="background: white; padding: 15px; border-radius: 10px; 
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: inline-block;
-                    transition: transform 0.2s, box-shadow 0.2s;"
-             onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,0,0,0.2)'"
-             onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'">
-        <img src="https://s.yimg.com/rz/d/yahoo_sports_en-US_f_p_142x37_2x.png" 
-             alt="Yahoo Fantasy Sports" style="height: 40px;">
-        </div>
-        </a>
-        </div>
-        """
-        st.markdown(yahoo_logo_html, unsafe_allow_html=True)
     
     st.markdown("""
     <p style="color: white; text-align: center; margin-top: 20px; opacity: 0.9;">
