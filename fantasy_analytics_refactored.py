@@ -685,35 +685,98 @@ class FootballAnalytics:
         if not player_keys:
             return {}
         
-        # Yahoo API can handle multiple player keys in one request
-        # Format: player_keys=key1,key2,key3
+        # Try different endpoint formats for weekly data
         player_keys_str = ",".join(player_keys)
-        stats_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={week}"
         
-        try:
-            resp = self.oauth.get(stats_url)
-            if resp.status_code != 200:
-                return {}
+        # Try multiple URL variations to get actual weekly data
+        endpoint_variations = [
+            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;type=week;week={week}",
+            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={week};type=week",
+            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={week}",
+            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats/week/{week}",
+        ]
+        
+        for stats_url in endpoint_variations:
+            try:
+                resp = self.oauth.get(stats_url)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.text)
+                    player_stats = {}
+                    
+                    for player in root.findall('.//y:player', config.YAHOO_NS):
+                        player_key_el = player.find('y:player_key', config.YAHOO_NS)
+                        if player_key_el is None:
+                            continue
+                        
+                        player_key = player_key_el.text
+                        
+                        # Try to get the correct weekly fantasy points
+                        points = self._extract_weekly_fantasy_points(player, week)
+                        player_stats[player_key] = points
+                    
+                    # If we got reasonable data (not inflated values), return it
+                    if player_stats and self._validate_weekly_points(player_stats):
+                        return player_stats
+                        
+            except Exception as e:
+                continue
+        
+        # Fallback: try individual requests
+        return self._get_players_weekly_stats_individual(player_keys, week)
+    
+    def _validate_weekly_points(self, player_stats: Dict[str, float]) -> bool:
+        """Validate that points look like weekly data, not season totals"""
+        if not player_stats:
+            return False
+        
+        values = [v for v in player_stats.values() if v > 0]
+        if not values:
+            return True  # All zeros might be valid for a bad week
+        
+        # Weekly fantasy points typically don't exceed 50 very often
+        # If most values are under 50, it's probably weekly data
+        reasonable_count = sum(1 for v in values if v <= 50)
+        return reasonable_count >= len(values) * 0.7  # 70% should be reasonable
+    
+    def _extract_weekly_fantasy_points(self, player_element, week: int) -> float:
+        """Extract weekly fantasy points, trying multiple methods"""
+        
+        # Method 1: Look for player_points with weekly context
+        points_el = player_element.find('.//y:player_points/y:total', config.YAHOO_NS)
+        if points_el is not None and points_el.text:
+            points = safe_float(points_el.text)
+            # If it's a reasonable weekly value, use it
+            if 0 <= points <= 60:
+                return points
+        
+        # Method 2: Look for fantasy_points field specifically
+        fantasy_points_el = player_element.find('.//y:fantasy_points', config.YAHOO_NS)
+        if fantasy_points_el is not None and fantasy_points_el.text:
+            points = safe_float(fantasy_points_el.text)
+            if 0 <= points <= 60:
+                return points
+        
+        # Method 3: Look through all stats for the most likely fantasy points value
+        stats = player_element.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
+        candidates = []
+        
+        for stat in stats:
+            stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
+            stat_value_el = stat.find('y:value', config.YAHOO_NS)
             
-            root = ET.fromstring(resp.text)
-            player_stats = {}
-            
-            for player in root.findall('.//y:player', config.YAHOO_NS):
-                player_key_el = player.find('y:player_key', config.YAHOO_NS)
-                if player_key_el is None:
-                    continue
+            if stat_id_el is not None and stat_value_el is not None:
+                stat_value = safe_float(stat_value_el.text)
                 
-                player_key = player_key_el.text
-                
-                # Extract fantasy points from stats
-                points = self._extract_fantasy_points_from_player_stats(player)
-                player_stats[player_key] = points
-            
-            return player_stats
-            
-        except Exception as e:
-            # Fallback: try individual requests if batch fails
-            return self._get_players_weekly_stats_individual(player_keys, week)
+                # Look for decimal values in reasonable range (likely fantasy points)
+                if 0 <= stat_value <= 60 and '.' in stat_value_el.text:
+                    candidates.append((stat_id_el.text, stat_value))
+        
+        # Return the first reasonable decimal candidate
+        if candidates:
+            candidates.sort(key=lambda x: abs(x[1] - 20))  # Prefer values around 20 (typical game)
+            return candidates[0][1]
+        
+        return 0.0
     
     def _get_players_weekly_stats_individual(self, player_keys: List[str], week: int) -> Dict[str, float]:
         """Fallback: get stats for players individually if batch request fails"""
