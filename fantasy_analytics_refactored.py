@@ -1353,6 +1353,16 @@ def setup_page():
             'About': "Skipper Analytics - Advanced Fantasy Sports Intelligence"
         }
     )
+    # Add Open Graph meta tags for social media previews
+    st.markdown("""
+    <meta property="og:title" content="Skipper Fantasy Analytics">
+    <meta property="og:description" content="Advanced Fantasy Sports Intelligence - Get analytics that go beyond basic fantasy apps">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rbf12394/fantasy-sports-analytics/main/skipper_logo.png">
+    <meta property="og:url" content="https://heyskip.streamlit.app">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/rbf12394/fantasy-sports-analytics/main/skipper_logo.png">
+    """, unsafe_allow_html=True)
     
     # Custom CSS for better overall styling
     st.markdown("""
