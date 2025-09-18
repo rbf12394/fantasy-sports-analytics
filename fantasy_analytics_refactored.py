@@ -1170,8 +1170,141 @@ class FootballAnalytics:
         return results
 
 # =============================================================================
-# MAIN APPLICATION
+# UI COMPONENTS
 # =============================================================================
+
+def render_landing_page(auth_url: str):
+    """Render enhanced landing page with logo and better design"""
+    
+    # Header with logo and title
+    col1, col2 = st.columns([1, 3])
+    
+    with col1:
+        # Try to display the Skipper logo image file first
+        try:
+            st.image("skipper_logo.png", width=150)
+        except:
+            # Fallback to CSS-based logo if image file not found
+            st.markdown("""
+            <div style="
+                width: 150px; 
+                height: 150px; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                border-radius: 15px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center;
+                box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+                margin: 10px 0;
+            ">
+                <div style="text-align: center;">
+                    <div style="font-size: 48px; margin-bottom: 8px;">🐕</div>
+                    <div style="color: white; font-weight: bold; font-size: 14px;">SKIPPER</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown("""
+        <div style="padding: 20px 0px;">
+        <h1 style="color: #1f77b4; margin-bottom: 0px;">Skipper Analytics</h1>
+        <h3 style="color: #666; margin-top: 0px; font-weight: 300;">Advanced Fantasy Sports Intelligence</h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Main value proposition
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("""
+        <div style="text-align: center; padding: 30px 0px;">
+        <h2 style="color: #333;">Take Your Fantasy Game to the Next Level</h2>
+        <p style="font-size: 18px; color: #666; line-height: 1.6;">
+        Get advanced analytics, team strength analysis, and positional insights 
+        that go far beyond basic fantasy apps.
+        </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Connect with Yahoo section
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 40px; border-radius: 15px; margin: 30px 0px;">
+    <div style="text-align: center;">
+    <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
+    """, unsafe_allow_html=True)
+    
+    # Create a proper hyperlink instead of button redirect
+    st.markdown(f"""
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{auth_url}" target="_self" style="
+            background: #ffffff;
+            color: #6B46C1;
+            padding: 12px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 16px;
+            display: inline-block;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)';" 
+           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)';">
+            🔗 Connect with Yahoo Fantasy
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <p style="color: white; text-align: center; margin-top: 20px; opacity: 0.9;">
+    Secure OAuth connection - we never store your password
+    </p>
+    </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Sports supported
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; padding: 20px 0px;">
+    <h3 style="color: #333; margin-bottom: 20px;">Supported Sports</h3>
+    <div style="display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;">
+    <div style="text-align: center; min-width: 200px; margin: 10px;">
+    <div style="font-size: 32px; margin-bottom: 8px;">⚾</div>
+    <strong>Baseball (MLB)</strong><br>
+    <span style="color: #666; font-size: 14px;">Z-score strength analysis<br>Team consistency metrics</span>
+    </div>
+    <div style="text-align: center; min-width: 200px; margin: 10px;">
+    <div style="font-size: 32px; margin-bottom: 8px;">🏈</div>
+    <strong>Football (NFL)</strong><br>
+    <span style="color: #666; font-size: 14px;">Positional heatmaps<br>Starter vs bench analysis</span>
+    </div>
+    </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Additional information section
+    with st.expander("How it works"):
+        st.markdown("""
+        **1. Connect Your Account**
+        - Securely connect to your Yahoo Fantasy Sports account
+        - We use OAuth 2.0 - your password stays with Yahoo
+        
+        **2. Select Your League** 
+        - Choose from your active fantasy leagues
+        - Works with both public and private leagues
+        
+        **3. Get Advanced Analytics**
+        - **Baseball**: Team strength z-scores, consistency analysis, category rankings
+        - **Football**: Positional breakdowns, starter vs bench analysis, weekly trends
+        
+        **4. Make Better Decisions**
+        - Identify trade targets and drop candidates
+        - Understand your team's strengths and weaknesses
+        - Track performance trends over time
+        """)
 
 def setup_page():
     """Configure Streamlit page"""
@@ -1737,92 +1870,9 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
         else:
             st.warning("Could not retrieve team information.")
 
-def render_landing_page(auth_url: str):
-    """Render enhanced landing page with logo and better design"""
-    
-    # Header with logo and title
-    col1, col2 = st.columns([1, 3])
-    
-    with col1:
-        # Display the Skipper dog mascot logo
-        try:
-            st.image("skipper_logo.png", width=150)
-        except:
-            # Fallback if image not available
-            st.markdown("""
-            <div style="width: 150px; height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                        border-radius: 15px; display: flex; align-items: center; justify-content: center;">
-            <span style="font-size: 48px;">🐕</span>
-            </div>
-            """, unsafe_allow_html=True)
-        
-    with col2:
-        st.markdown("""
-        <div style="padding: 20px 0px;">
-        <h1 style="color: #1f77b4; margin-bottom: 0px;">Skipper Analytics</h1>
-        <h3 style="color: #666; margin-top: 0px; font-weight: 300;">Advanced Fantasy Sports Intelligence</h3>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Main value proposition
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("""
-        <div style="text-align: center; padding: 30px 0px;">
-        <h2 style="color: #333;">Take Your Fantasy Game to the Next Level</h2>
-        <p style="font-size: 18px; color: #666; line-height: 1.6;">
-        Get advanced analytics, team strength analysis, and positional insights 
-        that go far beyond basic fantasy apps.
-        </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Connect with Yahoo section
-    st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 40px; border-radius: 15px; margin: 30px 0px;">
-    <div style="text-align: center;">
-    <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
-    """, unsafe_allow_html=True)
-    
-    # Yahoo Fantasy Sports button (centered)
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        # Create clickable Yahoo button that redirects
-        if st.button("Connect with Yahoo Fantasy", type="primary", key="yahoo_connect"):
-            st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
-            st.success("Redirecting to Yahoo...")
-    
-    st.markdown("""
-    <p style="color: white; text-align: center; margin-top: 20px; opacity: 0.9;">
-    Secure OAuth connection - we never store your password
-    </p>
-    </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Sports supported
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; padding: 20px 0px;">
-    <h3 style="color: #333; margin-bottom: 20px;">Supported Sports</h3>
-    <div style="display: flex; justify-content: center; gap: 40px;">
-    <div style="text-align: center;">
-    <div style="font-size: 32px; margin-bottom: 8px;">⚾</div>
-    <strong>Baseball (MLB)</strong><br>
-    <span style="color: #666; font-size: 14px;">Z-score strength analysis<br>Team consistency metrics</span>
-    </div>
-    <div style="text-align: center;">
-    <div style="font-size: 32px; margin-bottom: 8px;">🏈</div>
-    <strong>Football (NFL)</strong><br>
-    <span style="color: #666; font-size: 14px;">Positional heatmaps<br>Starter vs bench analysis</span>
-    </div>
-    </div>
-    </div>
-    """, unsafe_allow_html=True)
+# =============================================================================
+# MAIN APPLICATION
+# =============================================================================
 
 def main():
     """Main application"""
