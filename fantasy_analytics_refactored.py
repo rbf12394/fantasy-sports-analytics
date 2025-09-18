@@ -612,7 +612,7 @@ class FootballAnalytics:
     
     @st.cache_data(ttl=config.CACHE_TTL)
     def get_roster_data(_self, week: int) -> List[Dict]:
-        """Get roster data for all teams with starter/bench info"""
+        """Get roster data for all teams with starter/bench info and fantasy points"""
         team_keys = _self.get_team_keys()
         if not team_keys:
             return []
@@ -620,36 +620,86 @@ class FootballAnalytics:
         all_player_data = []
         
         for team_key, team_name in team_keys:
-            # Use roster endpoint with week parameter to get selected_position
-            roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
+            # Try combined roster+stats endpoint first
+            combined_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}/players/stats"
             
             try:
+                resp = _self.oauth.get(combined_url)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.text)
+                    players_data = _self._extract_players_with_stats(root, team_name, week)
+                    if players_data:
+                        all_player_data.extend(players_data)
+                        continue
+            except Exception:
+                pass
+            
+            # Fallback: try just roster data (without fantasy points)
+            roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
+            try:
                 resp = _self.oauth.get(roster_url)
-                if resp.status_code != 200:
-                    continue
-                
-                root = ET.fromstring(resp.text)
-                
-                for player in root.findall('.//y:player', config.YAHOO_NS):
-                    player_data = _self._extract_player_info(player, team_name, week)
-                    if player_data:
-                        all_player_data.append(player_data)
-                        
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.text)
+                    players_data = _self._extract_players_basic(root, team_name, week)
+                    if players_data:
+                        all_player_data.extend(players_data)
             except Exception as e:
                 st.warning(f"Error getting roster for {team_name}: {e}")
                 continue
         
         return all_player_data
     
-    def _extract_player_info(self, player_element, team_name: str, week: int) -> Optional[Dict]:
-        """Extract player information including starter status"""
+    def _extract_players_with_stats(self, root_element, team_name: str, week: int) -> List[Dict]:
+        """Extract player data including fantasy points from combined endpoint"""
+        players_data = []
+        
+        for player in root_element.findall('.//y:player', config.YAHOO_NS):
+            player_data = self._extract_player_info_with_stats(player, team_name, week)
+            if player_data:
+                players_data.append(player_data)
+        
+        return players_data
+    
+    def _extract_players_basic(self, root_element, team_name: str, week: int) -> List[Dict]:
+        """Extract basic player data without fantasy points"""
+        players_data = []
+        
+        for player in root_element.findall('.//y:player', config.YAHOO_NS):
+            player_data = self._extract_player_info_basic(player, team_name, week)
+            if player_data:
+                players_data.append(player_data)
+        
+        return players_data
+    
+    def _extract_player_info_with_stats(self, player_element, team_name: str, week: int) -> Optional[Dict]:
+        """Extract player information with fantasy points"""
+        # Get basic player info
+        basic_info = self._get_basic_player_info(player_element, team_name, week)
+        if not basic_info:
+            return None
+        
+        # Look for fantasy points in player_stats
+        points = self._extract_fantasy_points_from_stats(player_element)
+        basic_info["Points"] = points
+        
+        return basic_info
+    
+    def _extract_player_info_basic(self, player_element, team_name: str, week: int) -> Optional[Dict]:
+        """Extract player information without fantasy points"""
+        basic_info = self._get_basic_player_info(player_element, team_name, week)
+        if basic_info:
+            basic_info["Points"] = 0.0  # No points data available
+        return basic_info
+    
+    def _get_basic_player_info(self, player_element, team_name: str, week: int) -> Optional[Dict]:
+        """Extract basic player information (name, position, starter status)"""
         # Get player name
         name_el = player_element.find('y:name/y:full', config.YAHOO_NS)
         if name_el is None:
             name_el = player_element.find('y:name', config.YAHOO_NS)
         player_name = name_el.text if name_el is not None else "Unknown"
         
-        # Get selected_position (this tells us starter vs bench)
+        # Get selected_position (starter vs bench)
         selected_pos_el = player_element.find('y:selected_position/y:position', config.YAHOO_NS)
         if selected_pos_el is None:
             selected_pos_el = player_element.find('y:selected_position', config.YAHOO_NS)
@@ -659,14 +709,11 @@ class FootballAnalytics:
         # Determine if starter or bench
         is_starter = selected_position not in ['BN', 'IR', 'DL'] and selected_position != "Unknown"
         
-        # Get player's natural position (different from roster position)
+        # Get player's natural position
         pos_el = player_element.find('y:display_position', config.YAHOO_NS)
         if pos_el is None:
             pos_el = player_element.find('y:eligible_positions/y:position', config.YAHOO_NS)
         natural_position = pos_el.text if pos_el is not None else selected_position
-        
-        # Get fantasy points
-        points = self._extract_fantasy_points(player_element)
         
         return {
             "Team": team_name,
@@ -674,19 +721,23 @@ class FootballAnalytics:
             "Position": self._clean_position(natural_position),
             "Selected_Position": selected_position,
             "Is_Starter": is_starter,
-            "Week": week,
-            "Points": points
+            "Week": week
         }
     
-    def _extract_fantasy_points(self, player_element) -> float:
-        """Extract fantasy points from player element"""
-        # Try player_points/total first
-        points_el = player_element.find('.//y:player_points/y:total', config.YAHOO_NS)
+    def _extract_fantasy_points_from_stats(self, player_element) -> float:
+        """Extract fantasy points from player stats section"""
+        # Look for player_stats section
+        player_stats = player_element.find('y:player_stats', config.YAHOO_NS)
+        if player_stats is None:
+            return 0.0
+        
+        # Try to find player_points
+        points_el = player_stats.find('.//y:player_points/y:total', config.YAHOO_NS)
         if points_el is not None and points_el.text:
             return safe_float(points_el.text)
         
-        # Try stats for fantasy points (stat_id="0")
-        stats = player_element.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
+        # Try to find stats with stat_id="0" (often fantasy points)
+        stats = player_stats.findall('.//y:stats/y:stat', config.YAHOO_NS)
         for stat in stats:
             stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
             stat_value_el = stat.find('y:value', config.YAHOO_NS)
