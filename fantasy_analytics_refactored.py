@@ -782,6 +782,8 @@ class FootballAnalytics:
         
         return 0.0
     
+    def get_league_scoring_settings(self) -> Dict:
+    
     def _get_team_roster_info(self, team_key: str, team_name: str, week: int) -> List[Dict]:
         """Get basic roster info (positions, starter/bench status)"""
         roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
