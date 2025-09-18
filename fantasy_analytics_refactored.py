@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fantasy Sports Analytics Suite - Complete Working Version
+Fantasy Sports Analytics Suite - Complete Working Version with Custom Logo
 Uses the player stats API endpoint for accurate weekly fantasy points
 """
 
@@ -1160,163 +1160,244 @@ class FootballAnalytics:
 # =============================================================================
 
 def render_landing_page(auth_url: str):
-    """Render enhanced landing page with logo and better design"""
+    """Render enhanced landing page with custom logo"""
+    
+    # Custom CSS for better styling
+    st.markdown("""
+    <style>
+    .main-header {
+        text-align: center;
+        padding: 2rem 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        margin: 1rem 0 2rem 0;
+        color: white;
+    }
+    .logo-section {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+    .value-prop {
+        text-align: center;
+        padding: 2rem 0;
+    }
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 2rem;
+        margin: 2rem 0;
+    }
+    .feature-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    .connect-button {
+        background: linear-gradient(135deg, #1f77b4, #2e8b57);
+        color: white;
+        padding: 1rem 2rem;
+        border-radius: 50px;
+        text-decoration: none;
+        font-weight: bold;
+        font-size: 18px;
+        display: inline-block;
+        margin: 1rem;
+        transition: transform 0.3s;
+    }
+    .connect-button:hover {
+        transform: translateY(-2px);
+        text-decoration: none;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
     # Header with logo and title
-    col1, col2 = st.columns([1, 3])
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    with col1:
-        # Try to display the Skipper logo image file first
+    with col2:
+        st.markdown('<div class="logo-section">', unsafe_allow_html=True)
+        
+        # Try to display your custom logo
         try:
-            st.image("skipper_logo.png", width=150)
+            st.image("skipper_logo.png", width=200)
         except:
-            # Fallback to CSS-based logo if image file not found
+            # Fallback if logo file not found
             st.markdown("""
             <div style="
-                width: 150px; 
-                height: 150px; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                width: 200px; 
+                height: 120px; 
+                background: linear-gradient(135deg, #4CAF50 0%, #2196F3 100%); 
                 border-radius: 15px; 
                 display: flex; 
                 align-items: center; 
                 justify-content: center;
-                box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-                margin: 10px 0;
+                box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+                margin: 0 auto;
             ">
                 <div style="text-align: center;">
-                    <div style="font-size: 48px; margin-bottom: 8px;">🏆</div>
-                    <div style="color: white; font-weight: bold; font-size: 14px;">SKIPPER</div>
+                    <div style="font-size: 48px; margin-bottom: 8px;">🐕</div>
+                    <div style="color: white; font-weight: bold; font-size: 16px;">SKIPPER</div>
+                    <div style="color: white; font-size: 12px;">Analytics</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
         
-    with col2:
-        st.markdown("""
-        <div style="padding: 20px 0px;">
-        <h1 style="color: #1f77b4; margin-bottom: 0px;">Skipper Analytics</h1>
-        <h3 style="color: #666; margin-top: 0px; font-weight: 300;">Advanced Fantasy Sports Intelligence</h3>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
-    st.markdown("---")
-    
-    # Main value proposition
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("""
-        <div style="text-align: center; padding: 30px 0px;">
-        <h2 style="color: #333;">Take Your Fantasy Game to the Next Level</h2>
-        <p style="font-size: 18px; color: #666; line-height: 1.6;">
-        Get advanced analytics, team strength analysis, and positional insights 
-        that go far beyond basic fantasy apps.
-        </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Connect with Yahoo section
+    # Main header
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 40px; border-radius: 15px; margin: 30px 0px;">
-    <div style="text-align: center;">
-    <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
+    <div class="main-header">
+        <h1 style="margin: 0; font-size: 3rem;">Skipper Analytics</h1>
+        <h3 style="margin: 0.5rem 0 0 0; opacity: 0.9; font-weight: 300;">Advanced Fantasy Sports Intelligence</h3>
+    </div>
     """, unsafe_allow_html=True)
     
-    # Direct link approach - much more reliable
+    # Value proposition
+    st.markdown("""
+    <div class="value-prop">
+        <h2 style="color: #2c3e50; margin-bottom: 1rem;">Take Your Fantasy Game to the Next Level</h2>
+        <p style="font-size: 20px; color: #7f8c8d; line-height: 1.6; max-width: 800px; margin: 0 auto;">
+        Get advanced analytics, team strength analysis, and positional insights 
+        that go far beyond basic fantasy apps. Make data-driven decisions to dominate your leagues.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Feature cards
+    st.markdown('<div class="feature-grid">', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        <div class="feature-card">
+            <div style="font-size: 48px; margin-bottom: 1rem;">⚾</div>
+            <h3>Baseball Analytics</h3>
+            <p>Z-score strength analysis, team consistency metrics, and category rankings to identify the best trade targets.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div class="feature-card">
+            <div style="font-size: 48px; margin-bottom: 1rem;">🏈</div>
+            <h3>Football Analytics</h3>
+            <p>Positional heatmaps, starter vs bench analysis, and weekly trends to optimize your lineups.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Connect section
+    st.markdown("""
+    <div style="text-align: center; padding: 3rem 2rem; background: #f8f9fa; border-radius: 15px; margin: 2rem 0;">
+        <h3 style="color: #2c3e50; margin-bottom: 1.5rem;">Ready to Get Started?</h3>
+        <p style="color: #6c757d; margin-bottom: 2rem;">Connect your Yahoo Fantasy account to unlock advanced analytics</p>
+    """, unsafe_allow_html=True)
+    
+    # Connect button
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         st.markdown(f"""
         <div style="text-align: center;">
-        <a href="{auth_url}" target="_blank" style="
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #1f77b4;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: bold;
-            font-size: 16px;
-        ">Connect with Yahoo Fantasy</a>
+            <a href="{auth_url}" target="_blank" class="connect-button">
+                🚀 Connect with Yahoo Fantasy
+            </a>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("""
-    <p style="color: white; text-align: center; margin-top: 20px; opacity: 0.9;">
-    Secure OAuth connection - we never store your password
-    </p>
-    </div>
+        <p style="color: #6c757d; text-align: center; margin-top: 1rem; font-size: 14px;">
+            🔒 Secure OAuth connection - we never store your password
+        </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Sports supported
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; padding: 20px 0px;">
-    <h3 style="color: #333; margin-bottom: 20px;">Supported Sports</h3>
-    <div style="display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;">
-    <div style="text-align: center; min-width: 200px; margin: 10px;">
-    <div style="font-size: 32px; margin-bottom: 8px;">⚾</div>
-    <strong>Baseball (MLB)</strong><br>
-    <span style="color: #666; font-size: 14px;">Z-score strength analysis<br>Team consistency metrics</span>
-    </div>
-    <div style="text-align: center; min-width: 200px; margin: 10px;">
-    <div style="font-size: 32px; margin-bottom: 8px;">🏈</div>
-    <strong>Football (NFL)</strong><br>
-    <span style="color: #666; font-size: 14px;">Positional heatmaps<br>Starter vs bench analysis</span>
-    </div>
-    </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Additional information section
-    with st.expander("How it works"):
+    # How it works
+    with st.expander("🔍 How Skipper Analytics Works", expanded=False):
         st.markdown("""
-        **1. Connect Your Account**
+        ### **1. 🔐 Connect Your Account**
         - Securely connect to your Yahoo Fantasy Sports account
         - We use OAuth 2.0 - your password stays with Yahoo
         
-        **2. Select Your League** 
+        ### **2. 📊 Select Your League** 
         - Choose from your active fantasy leagues
         - Works with both public and private leagues
         
-        **3. Get Advanced Analytics**
+        ### **3. 🎯 Get Advanced Analytics**
         - **Baseball**: Team strength z-scores, consistency analysis, category rankings
         - **Football**: Positional breakdowns, starter vs bench analysis, weekly trends
         
-        **4. Make Better Decisions**
+        ### **4. 🏆 Make Better Decisions**
         - Identify trade targets and drop candidates
         - Understand your team's strengths and weaknesses
         - Track performance trends over time
+        - Get actionable insights to win your league
         """)
 
 def setup_page():
-    """Configure Streamlit page"""
+    """Configure Streamlit page with enhanced settings"""
     st.set_page_config(
-        page_title="Fantasy Sports Analytics Suite",
-        page_icon="🏆",
+        page_title="Skipper Fantasy Analytics",
+        page_icon="🐕",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="expanded",
+        menu_items={
+            'Get Help': 'https://github.com/your-repo',
+            'Report a bug': "https://github.com/your-repo/issues",
+            'About': "Skipper Analytics - Advanced Fantasy Sports Intelligence"
+        }
     )
+    
+    # Custom CSS for better overall styling
+    st.markdown("""
+    <style>
+    .stApp {
+        background-color: #f8f9fa;
+    }
+    .main .block-container {
+        padding-top: 2rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 def render_sidebar():
-    """Render sidebar controls"""
+    """Render enhanced sidebar with better styling"""
     with st.sidebar:
-        st.header("🛠️ Controls")
-        
-        if st.button("🔄 Refresh Data"):
-            st.cache_data.clear()
-            st.rerun()
-        
-        if st.button("🚪 Logout"):
-            clear_session_state()
-            st.rerun()
+        # Logo in sidebar
+        try:
+            st.image("skipper_logo.png", width=120)
+        except:
+            st.markdown("🐕 **Skipper Analytics**")
         
         st.markdown("---")
-        st.header("ℹ️ About")
-        st.markdown("""
-        **Fantasy Sports Analytics Suite**
         
-        Advanced analytics for Yahoo Fantasy leagues:
+        st.header("🛠️ Controls")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 Refresh", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+        
+        with col2:
+            if st.button("🚪 Logout", use_container_width=True):
+                clear_session_state()
+                st.rerun()
+        
+        st.markdown("---")
+        
+        st.header("About")
+        st.markdown("""
+        **Advanced Fantasy Analytics**
+        
+        **Features:**
         - Team performance heatmaps
         - Z-score strength analysis
         - Weekly trends analysis  
@@ -1324,8 +1405,8 @@ def render_sidebar():
         - Customizable timeframes
         
         **Supported Sports:**
-        - ⚾ Baseball (MLB)
-        - 🏈 Football (NFL)
+        - Baseball (MLB)
+        - Football (NFL)
         """)
 
 def handle_authentication():
@@ -1381,7 +1462,7 @@ def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
     """Render enhanced baseball analytics"""
     analytics = BaseballAnalytics(league_key, oauth_session)
     
-    st.success("⚾ Running Fantasy Baseball Analytics...")
+    st.success("Baseball analytics loaded successfully!")
     
     # Get available weeks
     available_weeks = analytics.get_available_weeks()
@@ -1408,15 +1489,17 @@ def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
     
     st.caption(f"Weeks included: {selected_weeks}")
     
-    # Compute stats
-    df_total, missing_weeks = analytics.compute_cumulative_stats(selected_weeks)
-    
-    if df_total.empty:
-        st.warning("No data available for selected timeframe.")
-        return
-    
-    # Compute strength analysis
-    strength_scores, consistency_scores = analytics.compute_team_strength(selected_weeks)
+    # Progress indicator
+    with st.spinner("Loading baseball analytics..."):
+        # Compute stats
+        df_total, missing_weeks = analytics.compute_cumulative_stats(selected_weeks)
+        
+        if df_total.empty:
+            st.warning("No data available for selected timeframe.")
+            return
+        
+        # Compute strength analysis
+        strength_scores, consistency_scores = analytics.compute_team_strength(selected_weeks)
     
     # Show any data issues
     if missing_weeks:
@@ -1426,10 +1509,10 @@ def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
     
     # Create tabs
     tab_heatmap, tab_strength, tab_z_scores, tab_data = st.tabs([
-        "📊 Rankings Heatmap", 
-        "💪 Team Strength", 
-        "📈 Z-Score Analysis", 
-        "📋 Raw Data"
+        "Rankings Heatmap", 
+        "Team Strength", 
+        "Z-Score Analysis", 
+        "Raw Data"
     ])
     
     with tab_heatmap:
@@ -1457,8 +1540,8 @@ def render_baseball_analytics(league_key: str, oauth_session: OAuth2Session):
                 
                 for i, (team, score) in enumerate(overall_strength.head(10).items()):
                     if i < 3:
-                        medal = ["🥇", "🥈", "🥉"][i]
-                        st.write(f"{medal} **{team}**: {score:.2f}")
+                        medal = ["1st", "2nd", "3rd"][i]
+                        st.write(f"**{medal}** - **{team}**: {score:.2f}")
                     else:
                         st.write(f"{i+1}. {team}: {score:.2f}")
             
@@ -1528,7 +1611,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
     """Render football analytics with proper starter/bench detection"""
     analytics = FootballAnalytics(league_key, oauth_session)
     
-    st.success("🏈 Running Fantasy Football Analytics...")
+    st.success("Football analytics loaded successfully!")
     
     # Get available weeks
     available_weeks = analytics.get_available_weeks()
@@ -1539,7 +1622,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
     st.write(f"Available weeks: {available_weeks}")
     
     # Create tabs
-    tab_positional, tab_trends, tab_debug = st.tabs(["🎯 Positional Analysis", "📈 Weekly Trends", "🔍 API Debug"])
+    tab_positional, tab_trends, tab_debug = st.tabs(["Positional Analysis", "Weekly Trends", "API Debug"])
     
     with tab_positional:
         st.header("Positional Fantasy Points Analysis")
@@ -1690,7 +1773,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                 roster_info = analytics._get_team_roster_info(team_key, team_name, debug_week)
                 
                 if roster_info:
-                    st.success(f"✅ Found {len(roster_info)} players on roster")
+                    st.success(f"Found {len(roster_info)} players on roster")
                     
                     # Show sample roster data
                     st.write("**Sample roster data:**")
@@ -1710,7 +1793,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                     for key in player_keys[:5]:
                         st.code(key)
                 else:
-                    st.error("❌ No roster data found")
+                    st.error("No roster data found")
             
             # Step 2: Test player stats endpoint
             col1, col2 = st.columns(2)
@@ -1729,7 +1812,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                         st.write(f"**Endpoint:** {results['endpoint_url']}")
                         
                         if results['success']:
-                            st.success(f"✅ Status {results['status_code']}")
+                            st.success(f"Success - Status {results['status_code']}")
                             
                             # Show player data found
                             if results.get('player_data'):
@@ -1757,7 +1840,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                             with st.expander("Raw XML Response"):
                                 st.text(results.get('raw_xml', 'No XML data'))
                         else:
-                            st.error(f"❌ Failed: Status {results.get('status_code', 'Unknown')}")
+                            st.error(f"Failed: Status {results.get('status_code', 'Unknown')}")
                             if 'error' in results:
                                 st.error(f"Error: {results['error']}")
                     else:
@@ -1777,11 +1860,11 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                             batch = results['batch_request']
                             st.write("**Batch Request Results:**")
                             if batch.get('success'):
-                                st.success(f"✅ Batch request successful")
+                                st.success(f"Batch request successful")
                                 st.write(f"- Requested {batch.get('player_count', 0)} players")
                                 st.write(f"- Found {batch.get('players_in_response', 0)} in response")
                             else:
-                                st.error(f"❌ Batch request failed: {batch.get('status_code', 'Unknown')}")
+                                st.error(f"Batch request failed: {batch.get('status_code', 'Unknown')}")
                                 if 'error' in batch:
                                     st.error(f"Error: {batch['error']}")
                         
@@ -1791,9 +1874,9 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                             for req in results['individual_requests']:
                                 if req.get('success'):
                                     points = req.get('fantasy_points', 0)
-                                    st.write(f"✅ {req['player_key']}: {points} points")
+                                    st.write(f"Success - {req['player_key']}: {points} points")
                                 else:
-                                    st.write(f"❌ {req['player_key']}: Failed")
+                                    st.write(f"Failed - {req['player_key']}")
                     else:
                         st.warning("Please run Step 1 first to get player keys")
             
@@ -1806,7 +1889,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                     roster_data = analytics.get_roster_data(debug_week)
                     
                     if roster_data:
-                        st.success(f"✅ Successfully extracted {len(roster_data)} player records")
+                        st.success(f"Successfully extracted {len(roster_data)} player records")
                         
                         df = pd.DataFrame(roster_data)
                         
@@ -1844,7 +1927,7 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                         with st.expander("Sample Data"):
                             st.dataframe(df.head(15))
                     else:
-                        st.error("❌ No data extracted")
+                        st.error("No data extracted")
             
             # Instructions
             with st.expander("How to use this debug tool"):
@@ -1904,7 +1987,7 @@ def main():
                 st.error(f"Authentication failed: {auth_result}")
             return
         
-        st.success("✅ Successfully authenticated!")
+        st.success("Successfully authenticated!")
         
         # Get leagues
         auth = YahooAuth()
@@ -1922,7 +2005,7 @@ def main():
             return
         
         # League selection
-        st.subheader("📋 Your Fantasy Leagues")
+        st.subheader("Your Fantasy Leagues")
         
         game_choices = sorted(set(league["game_name"] for league in leagues))
         game_choice = st.selectbox("Choose a sport:", ["Select..."] + game_choices)
