@@ -1222,13 +1222,23 @@ def render_landing_page(auth_url: str):
     <h3 style="color: white; margin-bottom: 30px;">Connect Your Yahoo Fantasy Account</h3>
     """, unsafe_allow_html=True)
     
-    # Yahoo Fantasy Sports button with better fallbacks
+    # Direct link approach - much more reliable
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("Connect with Yahoo Fantasy", type="primary", key="yahoo_connect"):
-            st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
-            st.success("Redirecting to Yahoo...")
-            st.markdown(f"**If you're not redirected automatically, [click here]({auth_url})**")
+        st.markdown(f"""
+        <div style="text-align: center;">
+        <a href="{auth_url}" target="_blank" style="
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #1f77b4;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 16px;
+        ">Connect with Yahoo Fantasy</a>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("""
     <p style="color: white; text-align: center; margin-top: 20px; opacity: 0.9;">
