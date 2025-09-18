@@ -580,7 +580,42 @@ class FootballAnalytics:
                         except (ValueError, TypeError):
                             pass
             
-            return results
+        def get_league_scoring_settings(self) -> Dict:
+        """Get league scoring settings for manual fantasy point calculation"""
+        settings_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/settings"
+        
+        try:
+            resp = self.oauth.get(settings_url)
+            if resp.status_code != 200:
+                return {}
+            
+            root = ET.fromstring(resp.text)
+            scoring_settings = {}
+            
+            # Look for stat_categories and their point values
+            stat_categories = root.findall('.//y:stat_categories/y:stats/y:stat', config.YAHOO_NS)
+            for stat in stat_categories:
+                stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
+                points_el = stat.find('.//y:value', config.YAHOO_NS)  # or points_per
+                
+                if stat_id_el is not None and points_el is not None:
+                    scoring_settings[stat_id_el.text] = safe_float(points_el.text)
+            
+            return scoring_settings
+            
+        except Exception:
+            return {}
+    
+    def calculate_fantasy_points_from_raw_stats(self, player_stats: Dict[str, str], scoring_settings: Dict[str, float]) -> float:
+        """Calculate fantasy points manually from raw stats and league settings"""
+        total_points = 0.0
+        
+        for stat_id, stat_value in player_stats.items():
+            if stat_id in scoring_settings:
+                stat_points = safe_float(stat_value) * scoring_settings[stat_id]
+                total_points += stat_points
+        
+        return total_points
             
         except Exception:
             return []
@@ -612,7 +647,7 @@ class FootballAnalytics:
     
     @st.cache_data(ttl=config.CACHE_TTL)
     def get_roster_data(_self, week: int) -> List[Dict]:
-        """Get roster data for all teams with weekly stats"""
+        """Get roster data for a SINGLE WEEK ONLY with weekly stats"""
         team_keys = _self.get_team_keys()
         if not team_keys:
             return []
@@ -620,21 +655,132 @@ class FootballAnalytics:
         all_player_data = []
         
         for team_key, team_name in team_keys:
-            # Step 1: Get roster structure (positions, starter/bench)
+            # Step 1: Get roster structure (positions, starter/bench) for THIS WEEK ONLY
             roster_info = _self._get_team_roster_info(team_key, team_name, week)
             
             # Step 2: Get player keys from roster
             player_keys = [p["player_key"] for p in roster_info if p.get("player_key")]
             
-            # Step 3: Get weekly stats for all players in batches
+            # Step 3: Get stats for THIS SPECIFIC WEEK ONLY
             if player_keys:
-                player_stats = _self._get_players_weekly_stats(player_keys, week)
+                player_stats = _self._get_players_single_week_stats(player_keys, week)
                 
                 # Step 4: Merge roster info with stats
                 merged_data = _self._merge_roster_and_weekly_stats(roster_info, player_stats, team_name, week)
                 all_player_data.extend(merged_data)
         
         return all_player_data
+    
+    def _get_players_single_week_stats(self, player_keys: List[str], week: int) -> Dict[str, float]:
+        """Get stats for a SINGLE WEEK ONLY - not cumulative"""
+        if not player_keys:
+            return {}
+        
+        # The key insight: we need to get ONLY this week's data, not cumulative
+        # Try the most specific endpoint format first
+        player_keys_str = ",".join(player_keys)
+        
+        # Try endpoints that specifically request ONLY that week's data
+        single_week_endpoints = [
+            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;type=week;week={week}",
+            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats/week/{week}",
+        ]
+        
+        for stats_url in single_week_endpoints:
+            try:
+                resp = self.oauth.get(stats_url)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.text)
+                    player_stats = {}
+                    
+                    for player in root.findall('.//y:player', config.YAHOO_NS):
+                        player_key_el = player.find('y:player_key', config.YAHOO_NS)
+                        if player_key_el is None:
+                            continue
+                        
+                        player_key = player_key_el.text
+                        
+                        # Extract ONLY this week's fantasy points
+                        points = self._extract_single_week_points(player, week)
+                        player_stats[player_key] = points
+                    
+                    return player_stats
+                        
+            except Exception as e:
+                continue
+        
+        # Fallback: If the API doesn't support true single-week queries,
+        # we'll need to calculate the difference between cumulative totals
+        return self._calculate_single_week_from_cumulative(player_keys, week)
+    
+    def _calculate_single_week_from_cumulative(self, player_keys: List[str], week: int) -> Dict[str, float]:
+        """Calculate single week stats by subtracting previous weeks from cumulative"""
+        if week == 1:
+            # For week 1, cumulative = single week
+            return self._get_cumulative_stats_through_week(player_keys, week)
+        
+        # Get cumulative through this week and previous week
+        cumulative_current = self._get_cumulative_stats_through_week(player_keys, week)
+        cumulative_previous = self._get_cumulative_stats_through_week(player_keys, week - 1)
+        
+        # Calculate the difference to get ONLY this week's stats
+        single_week_stats = {}
+        for player_key in player_keys:
+            current_total = cumulative_current.get(player_key, 0.0)
+            previous_total = cumulative_previous.get(player_key, 0.0)
+            single_week_points = current_total - previous_total
+            single_week_stats[player_key] = max(0.0, single_week_points)  # Ensure non-negative
+        
+        return single_week_stats
+    
+    def _get_cumulative_stats_through_week(self, player_keys: List[str], through_week: int) -> Dict[str, float]:
+        """Get cumulative stats from week 1 through the specified week"""
+        player_keys_str = ",".join(player_keys)
+        stats_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={through_week}"
+        
+        try:
+            resp = self.oauth.get(stats_url)
+            if resp.status_code == 200:
+                root = ET.fromstring(resp.text)
+                player_stats = {}
+                
+                for player in root.findall('.//y:player', config.YAHOO_NS):
+                    player_key_el = player.find('y:player_key', config.YAHOO_NS)
+                    if player_key_el is None:
+                        continue
+                    
+                    player_key = player_key_el.text
+                    
+                    # Get the cumulative points through this week
+                    points = self._extract_fantasy_points_from_player_stats(player)
+                    player_stats[player_key] = points
+                
+                return player_stats
+        except Exception:
+            pass
+        
+        return {}
+    
+    def _extract_single_week_points(self, player_element, week: int) -> float:
+        """Extract fantasy points for a single week only"""
+        # Look for weekly-specific fantasy points
+        points_el = player_element.find('.//y:player_points/y:total', config.YAHOO_NS)
+        if points_el is not None and points_el.text:
+            points = safe_float(points_el.text)
+            # Should be reasonable for a single week (0-60 range)
+            if 0 <= points <= 60:
+                return points
+        
+        # Look for reasonable decimal values that could be single-week points
+        stats = player_element.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
+        for stat in stats:
+            stat_value_el = stat.find('y:value', config.YAHOO_NS)
+            if stat_value_el is not None and stat_value_el.text and '.' in stat_value_el.text:
+                value = safe_float(stat_value_el.text)
+                if 0 <= value <= 60:  # Reasonable single-week range
+                    return value
+        
+        return 0.0
     
     def _get_team_roster_info(self, team_key: str, team_name: str, week: int) -> List[Dict]:
         """Get basic roster info (positions, starter/bench status)"""
