@@ -737,30 +737,49 @@ class FootballAnalytics:
         return player_stats
     
     def _extract_fantasy_points_from_player_stats(self, player_element) -> float:
-        """Extract fantasy points from player stats XML"""
-        # Method 1: Look for player_points
+        """Extract fantasy points from player stats XML - targeting weekly fantasy points"""
+        # Method 1: Look for player_points/total (most reliable for weekly data)
         points_el = player_element.find('.//y:player_points/y:total', config.YAHOO_NS)
         if points_el is not None and points_el.text:
-            return safe_float(points_el.text)
+            weekly_points = safe_float(points_el.text)
+            # Weekly fantasy points should be reasonable (0-50 range typically)
+            if 0 <= weekly_points <= 60:
+                return weekly_points
         
-        # Method 2: Look for stats section with fantasy points (stat_id="0")
+        # Method 2: Look for stats section with fantasy points (stat_id="0" is typically fantasy points)
         stats = player_element.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
+        fantasy_points_candidates = []
+        
         for stat in stats:
             stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
             stat_value_el = stat.find('y:value', config.YAHOO_NS)
             
-            if (stat_id_el is not None and stat_value_el is not None and 
-                stat_id_el.text == "0"):
-                return safe_float(stat_value_el.text)
+            if stat_id_el is not None and stat_value_el is not None:
+                stat_id = stat_id_el.text
+                stat_value = safe_float(stat_value_el.text)
+                
+                # stat_id="0" is typically fantasy points in Yahoo's system
+                if stat_id == "0" and 0 <= stat_value <= 60:
+                    return stat_value
+                
+                # Collect other potential fantasy points values (reasonable weekly range)
+                if 0 <= stat_value <= 60:
+                    fantasy_points_candidates.append((stat_id, stat_value))
         
-        # Method 3: Look for any stats with reasonable point values
-        for stat in stats:
-            stat_value_el = stat.find('y:value', config.YAHOO_NS)
-            if stat_value_el is not None and stat_value_el.text:
-                value = safe_float(stat_value_el.text)
-                if 0 <= value <= 100:  # Reasonable fantasy points range
+        # Method 3: If we have candidates, try to pick the most likely fantasy points value
+        if fantasy_points_candidates:
+            # Sort by value and pick a reasonable one (not too high, not zero unless it should be)
+            fantasy_points_candidates.sort(key=lambda x: x[1])
+            for stat_id, value in fantasy_points_candidates:
+                # Look for stat IDs that commonly represent fantasy points
+                if stat_id in ["0", "1"]:  # Common fantasy points stat IDs
                     return value
+            # If no common IDs found, return the median value as best guess
+            if len(fantasy_points_candidates) > 0:
+                mid_idx = len(fantasy_points_candidates) // 2
+                return fantasy_points_candidates[mid_idx][1]
         
+        # Method 4: Debug fallback - return 0 but this indicates extraction failed
         return 0.0
     
     def _merge_roster_and_weekly_stats(self, roster_info: List[Dict], player_stats: Dict[str, float], 
@@ -916,6 +935,7 @@ class FootballAnalytics:
             "success": False,
             "xml_tags": [],
             "player_data": {},
+            "all_stats_found": {},
             "raw_xml": ""
         }
         
@@ -923,7 +943,7 @@ class FootballAnalytics:
             resp = self.oauth.get(stats_url)
             results["status_code"] = resp.status_code
             results["success"] = resp.status_code == 200
-            results["raw_xml"] = resp.text[:2000]  # First 2000 chars
+            results["raw_xml"] = resp.text[:3000]  # First 3000 chars
             
             if resp.status_code == 200:
                 root = ET.fromstring(resp.text)
@@ -946,20 +966,33 @@ class FootballAnalytics:
                     if name_el is not None:
                         player_data["name"] = name_el.text
                     
-                    # Get all stats
+                    # Get ALL stats with their IDs and values
                     stats = player.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
+                    all_stats = {}
                     stats_dict = {}
                     for stat in stats:
                         stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
                         stat_value_el = stat.find('y:value', config.YAHOO_NS)
                         if stat_id_el is not None and stat_value_el is not None:
-                            stats_dict[stat_id_el.text] = stat_value_el.text
+                            stat_id = stat_id_el.text
+                            stat_value = stat_value_el.text
+                            stats_dict[stat_id] = stat_value
+                            all_stats[f"stat_id_{stat_id}"] = stat_value
+                    
                     player_data["stats"] = stats_dict
+                    results["all_stats_found"] = all_stats
                     
                     # Look for player_points
                     points_el = player.find('.//y:player_points/y:total', config.YAHOO_NS)
                     if points_el is not None:
                         player_data["player_points"] = points_el.text
+                        results["all_stats_found"]["player_points_total"] = points_el.text
+                    
+                    # Look for other point-related fields
+                    for elem in player.iter():
+                        tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                        if 'point' in tag.lower() and elem.text:
+                            results["all_stats_found"][tag] = elem.text
                     
                     results["player_data"] = player_data
                     
