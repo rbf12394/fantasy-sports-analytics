@@ -580,42 +580,7 @@ class FootballAnalytics:
                         except (ValueError, TypeError):
                             pass
             
-        def get_league_scoring_settings(self) -> Dict:
-        """Get league scoring settings for manual fantasy point calculation"""
-        settings_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/settings"
-        
-        try:
-            resp = self.oauth.get(settings_url)
-            if resp.status_code != 200:
-                return {}
-            
-            root = ET.fromstring(resp.text)
-            scoring_settings = {}
-            
-            # Look for stat_categories and their point values
-            stat_categories = root.findall('.//y:stat_categories/y:stats/y:stat', config.YAHOO_NS)
-            for stat in stat_categories:
-                stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
-                points_el = stat.find('.//y:value', config.YAHOO_NS)  # or points_per
-                
-                if stat_id_el is not None and points_el is not None:
-                    scoring_settings[stat_id_el.text] = safe_float(points_el.text)
-            
-            return scoring_settings
-            
-        except Exception:
-            return {}
-    
-    def calculate_fantasy_points_from_raw_stats(self, player_stats: Dict[str, str], scoring_settings: Dict[str, float]) -> float:
-        """Calculate fantasy points manually from raw stats and league settings"""
-        total_points = 0.0
-        
-        for stat_id, stat_value in player_stats.items():
-            if stat_id in scoring_settings:
-                stat_points = safe_float(stat_value) * scoring_settings[stat_id]
-                total_points += stat_points
-        
-        return total_points
+            return results
             
         except Exception:
             return []
@@ -671,6 +636,50 @@ class FootballAnalytics:
         
         return all_player_data
     
+    def _get_team_roster_info(self, team_key: str, team_name: str, week: int) -> List[Dict]:
+        """Get basic roster info (positions, starter/bench status)"""
+        roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
+        
+        try:
+            resp = self.oauth.get(roster_url)
+            if resp.status_code != 200:
+                return []
+            
+            root = ET.fromstring(resp.text)
+            roster_info = []
+            
+            for player in root.findall('.//y:player', config.YAHOO_NS):
+                # Extract basic roster information
+                player_key_el = player.find('y:player_key', config.YAHOO_NS)
+                if player_key_el is None:
+                    continue
+                    
+                name_el = player.find('y:name/y:full', config.YAHOO_NS)
+                if name_el is None:
+                    name_el = player.find('y:name', config.YAHOO_NS)
+                
+                selected_pos_el = player.find('y:selected_position/y:position', config.YAHOO_NS)
+                if selected_pos_el is None:
+                    selected_pos_el = player.find('y:selected_position', config.YAHOO_NS)
+                
+                pos_el = player.find('y:display_position', config.YAHOO_NS)
+                if pos_el is None:
+                    pos_el = player.find('y:eligible_positions/y:position', config.YAHOO_NS)
+                
+                player_info = {
+                    "player_key": player_key_el.text,
+                    "player_name": name_el.text if name_el is not None else "Unknown",
+                    "selected_position": selected_pos_el.text if selected_pos_el is not None else "Unknown",
+                    "display_position": pos_el.text if pos_el is not None else "Unknown"
+                }
+                
+                roster_info.append(player_info)
+            
+            return roster_info
+            
+        except Exception:
+            return []
+    
     def _get_players_single_week_stats(self, player_keys: List[str], week: int) -> Dict[str, float]:
         """Get stats for a SINGLE WEEK ONLY - not cumulative"""
         if not player_keys:
@@ -706,7 +715,7 @@ class FootballAnalytics:
                     
                     return player_stats
                         
-            except Exception as e:
+            except Exception:
                 continue
         
         # Fallback: If the API doesn't support true single-week queries,
@@ -781,171 +790,6 @@ class FootballAnalytics:
                     return value
         
         return 0.0
-    
-    def get_league_scoring_settings(self) -> Dict:
-    
-    def _get_team_roster_info(self, team_key: str, team_name: str, week: int) -> List[Dict]:
-        """Get basic roster info (positions, starter/bench status)"""
-        roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
-        
-        try:
-            resp = self.oauth.get(roster_url)
-            if resp.status_code != 200:
-                return []
-            
-            root = ET.fromstring(resp.text)
-            roster_info = []
-            
-            for player in root.findall('.//y:player', config.YAHOO_NS):
-                # Extract basic roster information
-                player_key_el = player.find('y:player_key', config.YAHOO_NS)
-                if player_key_el is None:
-                    continue
-                    
-                name_el = player.find('y:name/y:full', config.YAHOO_NS)
-                if name_el is None:
-                    name_el = player.find('y:name', config.YAHOO_NS)
-                
-                selected_pos_el = player.find('y:selected_position/y:position', config.YAHOO_NS)
-                if selected_pos_el is None:
-                    selected_pos_el = player.find('y:selected_position', config.YAHOO_NS)
-                
-                pos_el = player.find('y:display_position', config.YAHOO_NS)
-                if pos_el is None:
-                    pos_el = player.find('y:eligible_positions/y:position', config.YAHOO_NS)
-                
-                player_info = {
-                    "player_key": player_key_el.text,
-                    "player_name": name_el.text if name_el is not None else "Unknown",
-                    "selected_position": selected_pos_el.text if selected_pos_el is not None else "Unknown",
-                    "display_position": pos_el.text if pos_el is not None else "Unknown"
-                }
-                
-                roster_info.append(player_info)
-            
-            return roster_info
-            
-        except Exception:
-            return []
-    
-    def _get_players_weekly_stats(self, player_keys: List[str], week: int) -> Dict[str, float]:
-        """Get weekly stats for multiple players using the player stats endpoint"""
-        if not player_keys:
-            return {}
-        
-        # Try different endpoint formats for weekly data
-        player_keys_str = ",".join(player_keys)
-        
-        # Try multiple URL variations to get actual weekly data
-        endpoint_variations = [
-            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;type=week;week={week}",
-            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={week};type=week",
-            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats;week={week}",
-            f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_keys_str}/stats/week/{week}",
-        ]
-        
-        for stats_url in endpoint_variations:
-            try:
-                resp = self.oauth.get(stats_url)
-                if resp.status_code == 200:
-                    root = ET.fromstring(resp.text)
-                    player_stats = {}
-                    
-                    for player in root.findall('.//y:player', config.YAHOO_NS):
-                        player_key_el = player.find('y:player_key', config.YAHOO_NS)
-                        if player_key_el is None:
-                            continue
-                        
-                        player_key = player_key_el.text
-                        
-                        # Try to get the correct weekly fantasy points
-                        points = self._extract_weekly_fantasy_points(player, week)
-                        player_stats[player_key] = points
-                    
-                    # If we got reasonable data (not inflated values), return it
-                    if player_stats and self._validate_weekly_points(player_stats):
-                        return player_stats
-                        
-            except Exception as e:
-                continue
-        
-        # Fallback: try individual requests
-        return self._get_players_weekly_stats_individual(player_keys, week)
-    
-    def _validate_weekly_points(self, player_stats: Dict[str, float]) -> bool:
-        """Validate that points look like weekly data, not season totals"""
-        if not player_stats:
-            return False
-        
-        values = [v for v in player_stats.values() if v > 0]
-        if not values:
-            return True  # All zeros might be valid for a bad week
-        
-        # Weekly fantasy points typically don't exceed 50 very often
-        # If most values are under 50, it's probably weekly data
-        reasonable_count = sum(1 for v in values if v <= 50)
-        return reasonable_count >= len(values) * 0.7  # 70% should be reasonable
-    
-    def _extract_weekly_fantasy_points(self, player_element, week: int) -> float:
-        """Extract weekly fantasy points, trying multiple methods"""
-        
-        # Method 1: Look for player_points with weekly context
-        points_el = player_element.find('.//y:player_points/y:total', config.YAHOO_NS)
-        if points_el is not None and points_el.text:
-            points = safe_float(points_el.text)
-            # If it's a reasonable weekly value, use it
-            if 0 <= points <= 60:
-                return points
-        
-        # Method 2: Look for fantasy_points field specifically
-        fantasy_points_el = player_element.find('.//y:fantasy_points', config.YAHOO_NS)
-        if fantasy_points_el is not None and fantasy_points_el.text:
-            points = safe_float(fantasy_points_el.text)
-            if 0 <= points <= 60:
-                return points
-        
-        # Method 3: Look through all stats for the most likely fantasy points value
-        stats = player_element.findall('.//y:player_stats/y:stats/y:stat', config.YAHOO_NS)
-        candidates = []
-        
-        for stat in stats:
-            stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
-            stat_value_el = stat.find('y:value', config.YAHOO_NS)
-            
-            if stat_id_el is not None and stat_value_el is not None:
-                stat_value = safe_float(stat_value_el.text)
-                
-                # Look for decimal values in reasonable range (likely fantasy points)
-                if 0 <= stat_value <= 60 and '.' in stat_value_el.text:
-                    candidates.append((stat_id_el.text, stat_value))
-        
-        # Return the first reasonable decimal candidate
-        if candidates:
-            candidates.sort(key=lambda x: abs(x[1] - 20))  # Prefer values around 20 (typical game)
-            return candidates[0][1]
-        
-        return 0.0
-    
-    def _get_players_weekly_stats_individual(self, player_keys: List[str], week: int) -> Dict[str, float]:
-        """Fallback: get stats for players individually if batch request fails"""
-        player_stats = {}
-        
-        for player_key in player_keys[:10]:  # Limit to avoid rate limits
-            try:
-                stats_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/players;player_keys={player_key}/stats;week={week}"
-                resp = self.oauth.get(stats_url)
-                
-                if resp.status_code == 200:
-                    root = ET.fromstring(resp.text)
-                    player = root.find('.//y:player', config.YAHOO_NS)
-                    if player is not None:
-                        points = self._extract_fantasy_points_from_player_stats(player)
-                        player_stats[player_key] = points
-                        
-            except Exception:
-                continue
-        
-        return player_stats
     
     def _extract_fantasy_points_from_player_stats(self, player_element) -> float:
         """Extract fantasy points from player stats XML - targeting weekly fantasy points"""
@@ -1040,17 +884,31 @@ class FootballAnalytics:
                 return None, pd.DataFrame()
         
         # Debug: Show what we're aggregating
-        st.write("**Debug - Sample data being aggregated:**")
-        sample_debug = df[df['Position'] == 'DEF'].head(10) if 'DEF' in df['Position'].values else df.head(5)
-        st.dataframe(sample_debug[['Team', 'Player', 'Position', 'Points', 'Week']])
+        st.write("**Debug - Raw data for DEF position:**")
+        if 'DEF' in df['Position'].values:
+            def_data = df[df['Position'] == 'DEF'][['Team', 'Player', 'Position', 'Points', 'Week', 'Is_Starter']]
+            st.dataframe(def_data)
+            
+            # Show the Points values being summed
+            st.write("**Points being summed for each team's DEF:**")
+            for team in def_data['Team'].unique():
+                team_def = def_data[def_data['Team'] == team]
+                points_list = team_def['Points'].tolist()
+                total = sum(points_list)
+                st.write(f"- {team}: {points_list} = {total}")
+        else:
+            st.write("No DEF players found")
+            sample_debug = df.head(10)[['Team', 'Player', 'Position', 'Points', 'Week']]
+            st.dataframe(sample_debug)
         
         # Aggregate by team and position - sum points across all weeks
         totals = df.groupby(["Team", "Position"])["Points"].sum().reset_index()
         
-        # Debug: Show aggregation results
-        st.write("**Debug - Aggregated totals:**")
-        def_totals = totals[totals['Position'] == 'DEF'] if 'DEF' in totals['Position'].values else totals.head(3)
-        st.dataframe(def_totals)
+        # Debug: Show aggregation results for DEF
+        st.write("**Debug - Final aggregated totals for DEF:**")
+        if 'DEF' in totals['Position'].values:
+            def_totals = totals[totals['Position'] == 'DEF']
+            st.dataframe(def_totals)
         
         pivot = totals.pivot(index="Team", columns="Position", values="Points").fillna(0)
         
@@ -1133,6 +991,43 @@ class FootballAnalytics:
         plt.tight_layout()
         
         return fig, pivot_sorted
+    
+    def get_league_scoring_settings(self) -> Dict:
+        """Get league scoring settings for manual fantasy point calculation"""
+        settings_url = f"{config.FANTASY_BASE_URL}/league/{self.league_key}/settings"
+        
+        try:
+            resp = self.oauth.get(settings_url)
+            if resp.status_code != 200:
+                return {}
+            
+            root = ET.fromstring(resp.text)
+            scoring_settings = {}
+            
+            # Look for stat_categories and their point values
+            stat_categories = root.findall('.//y:stat_categories/y:stats/y:stat', config.YAHOO_NS)
+            for stat in stat_categories:
+                stat_id_el = stat.find('y:stat_id', config.YAHOO_NS)
+                points_el = stat.find('.//y:value', config.YAHOO_NS)  # or points_per
+                
+                if stat_id_el is not None and points_el is not None:
+                    scoring_settings[stat_id_el.text] = safe_float(points_el.text)
+            
+            return scoring_settings
+            
+        except Exception:
+            return {}
+    
+    def calculate_fantasy_points_from_raw_stats(self, player_stats: Dict[str, str], scoring_settings: Dict[str, float]) -> float:
+        """Calculate fantasy points manually from raw stats and league settings"""
+        total_points = 0.0
+        
+        for stat_id, stat_value in player_stats.items():
+            if stat_id in scoring_settings:
+                stat_points = safe_float(stat_value) * scoring_settings[stat_id]
+                total_points += stat_points
+        
+        return total_points
     
     def debug_player_stats_endpoint(self, sample_player_key: str, week: int) -> Dict:
         """Debug the player stats endpoint to see what data is available"""
@@ -1537,31 +1432,19 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
         
         starters_only = analysis_type.startswith("Starters Only")
         
-        # Collect data
+        # Collect data - process each week separately to avoid cumulative issue
         all_data = []
         progress = st.progress(0)
         
         for i, week in enumerate(weeks_to_analyze):
             st.write(f"Processing Week {week}...")
-            week_data = analytics.get_roster_data(week)
+            week_data = analytics.get_roster_data(week)  # This now gets ONLY that week's data
             all_data.extend(week_data)
             progress.progress((i + 1) / len(weeks_to_analyze))
         
         if not all_data:
             st.error("No roster data found.")
             return
-        
-        # Debug: Show sample data
-        with st.expander("Debug: Sample Data Structure"):
-            sample_df = pd.DataFrame(all_data[:10])
-            st.dataframe(sample_df)
-            st.write(f"Total records: {len(all_data)}")
-            
-            # Show starter/bench breakdown
-            if 'Is_Starter' in sample_df.columns:
-                starter_count = len([d for d in all_data if d.get('Is_Starter', False)])
-                bench_count = len([d for d in all_data if not d.get('Is_Starter', True)])
-                st.write(f"Starters: {starter_count}, Bench: {bench_count}")
         
         # Create visualization
         fig, pivot = analytics.create_positional_heatmap(all_data, starters_only=starters_only)
