@@ -26,7 +26,7 @@ class Config:
         # Get credentials from environment variables (more secure)
         self.CLIENT_ID = os.getenv("YAHOO_CLIENT_ID", "dj0yJmk9NDlOM0xEbjdod2VyJmQ9WVdrOWJ6TmhWM1U1UVhnbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTFi")
         self.CLIENT_SECRET = os.getenv("YAHOO_CLIENT_SECRET", "b9a3f55e22aa865a0783edaa4426a21fb83581d8")
-        self.REDIRECT_URI = os.getenv("YAHOO_REDIRECT_URI", "https://ed85bde5dfda.ngrok-free.app")
+        self.REDIRECT_URI = os.getenv("YAHOO_REDIRECT_URI", "https://fantasy-sports-analytics-btpkyqxsaolbmccjvtrqxu.streamlit.app")
         
         # Yahoo API URLs
         self.AUTH_URL = "https://api.login.yahoo.com/oauth2/request_auth"
