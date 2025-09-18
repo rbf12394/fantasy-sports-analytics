@@ -1,7 +1,4 @@
-with col2:
-                if st.button("Step-by-Step Debug"):
-                    team_key = selected_team.split("(")[1].rstrip(")")
-                    team_name = selected_team.split("#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Fantasy Sports Analytics Suite - Clean Working Version
 Simplified football analytics with proper debugging
@@ -897,6 +894,8 @@ class FootballAnalytics:
             results["errors"].append(f"Step 3 error: {str(e)}")
         
         return results
+    
+    def debug_single_endpoint(self, team_key: str, week: int, endpoint_url: str) -> Dict:
         """Debug a single API endpoint"""
         try:
             resp = self.oauth.get(endpoint_url)
@@ -917,7 +916,7 @@ class FootballAnalytics:
             }
 
 # =============================================================================
-# MAIN APPLICATION (unchanged)
+# MAIN APPLICATION
 # =============================================================================
 
 def setup_page():
@@ -1309,6 +1308,54 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
             col1, col2 = st.columns(2)
             
             with col1:
+                if st.button("Step-by-Step Debug"):
+                    team_key = selected_team.split("(")[1].rstrip(")")
+                    team_name = selected_team.split(" (")[0]
+                    
+                    results = analytics.debug_step_by_step(team_key, team_name, debug_week)
+                    
+                    st.subheader("Debug Results")
+                    
+                    # Step 1 results
+                    if results["step1_roster"]:
+                        st.write("**Step 1: Roster Endpoint**")
+                        step1 = results["step1_roster"]
+                        if step1["success"]:
+                            st.success(f"✅ Status {step1['status']}")
+                            st.write(f"Extracted {step1.get('extracted_players', 0)} players")
+                            if step1.get('sample_data'):
+                                st.json(step1['sample_data'])
+                        else:
+                            st.error(f"❌ Failed: {step1['status']}")
+                    
+                    # Step 2 results  
+                    if results["step2_stats"]:
+                        st.write("**Step 2: Stats Endpoint**")
+                        step2 = results["step2_stats"]
+                        if step2["success"]:
+                            st.success(f"✅ Status {step2['status']}")
+                            st.write(f"Found points for {step2.get('extracted_points', 0)} players")
+                            if step2.get('sample_points'):
+                                st.json(step2['sample_points'])
+                        else:
+                            st.error(f"❌ Failed: {step2['status']}")
+                    
+                    # Step 3 results
+                    if results["step3_merged"]:
+                        st.write("**Step 3: Merged Data**")
+                        step3 = results["step3_merged"]
+                        st.success(f"✅ Merged {step3.get('merged_players', 0)} players")
+                        st.write(f"Players with points: {step3.get('points_found', 0)}")
+                        if step3.get('sample_merged'):
+                            st.json(step3['sample_merged'])
+                    
+                    # Show any errors
+                    if results["errors"]:
+                        st.write("**Errors:**")
+                        for error in results["errors"]:
+                            st.error(error)
+            
+            with col2:
                 if st.button("Test Roster Endpoint"):
                     team_key = selected_team.split("(")[1].rstrip(")")
                     roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={debug_week}"
@@ -1333,28 +1380,6 @@ def render_football_analytics(league_key: str, oauth_session: OAuth2Session):
                     else:
                         st.error(f"❌ Failed: {result['status_code']}")
                         st.text(result["response_text"][:500])
-            
-            with col2:
-                if st.button("Test Current Extraction"):
-                    st.write("Testing our roster data extraction...")
-                    
-                    roster_data = analytics.get_roster_data(debug_week)
-                    
-                    if roster_data:
-                        st.success(f"✅ Extracted {len(roster_data)} player records")
-                        
-                        # Show sample
-                        sample_df = pd.DataFrame(roster_data[:10])
-                        st.dataframe(sample_df)
-                        
-                        # Show starter/bench counts
-                        if 'Is_Starter' in sample_df.columns:
-                            starter_count = len([d for d in roster_data if d.get('Is_Starter', False)])
-                            bench_count = len([d for d in roster_data if not d.get('Is_Starter', True)])
-                            st.write(f"Starters: {starter_count}")
-                            st.write(f"Bench: {bench_count}")
-                    else:
-                        st.error("❌ No data extracted")
             
             # Instructions
             with st.expander("What to look for in roster data"):
