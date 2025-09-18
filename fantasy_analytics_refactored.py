@@ -202,7 +202,7 @@ class BaseballAnalytics:
         self.LOWER_BETTER = ['ERA', 'WHIP']
         self.COUNT_COLS = [c for c in self.WANTED_COLS if c not in self.RATE_COLS]
     
-    @st.cache_data(ttl=config.CACHE_TTL)
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment
     def week_has_data(_self, week: int) -> bool:
         """Check if week has data"""
         url = f"{config.FANTASY_BASE_URL}/league/{_self.league_key}/scoreboard;week={week}"
@@ -230,7 +230,7 @@ class BaseballAnalytics:
         except Exception:
             return False
     
-    @st.cache_data(ttl=config.CACHE_TTL)
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment
     def get_available_weeks(_self, max_weeks: int = 30) -> List[int]:
         """Get weeks with available data"""
         weeks = []
@@ -247,7 +247,7 @@ class BaseballAnalytics:
         
         return weeks
     
-    @st.cache_data(ttl=config.CACHE_TTL)
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment
     def get_weekly_stats(_self, week: int) -> pd.DataFrame:
         """Get weekly stats for all teams"""
         url = f"{config.FANTASY_BASE_URL}/league/{_self.league_key}/scoreboard;week={week}"
@@ -531,7 +531,7 @@ class FootballAnalytics:
             'DEF': 'DEF', 'DST': 'DEF', 'D/ST': 'DEF'
         }
     
-    @st.cache_data(ttl=config.CACHE_TTL)
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment
     def week_has_data(_self, week: int) -> bool:
         """Check if week has data"""
         url = f"{config.FANTASY_BASE_URL}/league/{_self.league_key}/scoreboard;week={week}"
@@ -545,7 +545,7 @@ class FootballAnalytics:
         except Exception:
             return False
     
-    @st.cache_data(ttl=config.CACHE_TTL)
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment  
     def get_available_weeks(_self, max_weeks: int = 18) -> List[int]:
         """Get available weeks"""
         weeks = []
@@ -562,7 +562,7 @@ class FootballAnalytics:
         
         return weeks
     
-    @st.cache_data(ttl=config.CACHE_TTL)  
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment
     def get_team_weekly_totals(_self, week: int) -> List[Dict]:
         """Get team weekly totals"""
         url = f"{config.FANTASY_BASE_URL}/league/{_self.league_key}/scoreboard;week={week}"
@@ -595,7 +595,7 @@ class FootballAnalytics:
         except Exception:
             return []
     
-    @st.cache_data(ttl=config.CACHE_TTL)
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment
     def get_team_keys(_self) -> List[Tuple[str, str]]:
         """Get team keys and names"""
         teams_url = f"{config.FANTASY_BASE_URL}/league/{_self.league_key}/teams"
@@ -620,7 +620,7 @@ class FootballAnalytics:
         except Exception:
             return []
     
-    @st.cache_data(ttl=config.CACHE_TTL)
+    # @st.cache_data(ttl=config.CACHE_TTL)  # Disabled for multi-user deployment
     def get_roster_data(_self, week: int) -> List[Dict]:
         """Get roster data for a SINGLE WEEK ONLY with weekly stats"""
         team_keys = _self.get_team_keys()
