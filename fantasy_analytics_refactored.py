@@ -620,79 +620,79 @@ class FootballAnalytics:
         all_player_data = []
         
         for team_key, team_name in team_keys:
-            # Try combined roster+stats endpoint first
-            combined_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}/players/stats"
+            # Step 1: Get roster structure (starter/bench info)
+            roster_data = _self._get_team_roster_structure(team_key, team_name, week)
             
-            try:
-                resp = _self.oauth.get(combined_url)
-                if resp.status_code == 200:
-                    root = ET.fromstring(resp.text)
-                    players_data = _self._extract_players_with_stats(root, team_name, week)
-                    if players_data:
-                        all_player_data.extend(players_data)
-                        continue
-            except Exception:
-                pass
+            # Step 2: Get fantasy points separately 
+            points_data = _self._get_team_fantasy_points(team_key, team_name, week)
             
-            # Fallback: try just roster data (without fantasy points)
-            roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
-            try:
-                resp = _self.oauth.get(roster_url)
-                if resp.status_code == 200:
-                    root = ET.fromstring(resp.text)
-                    players_data = _self._extract_players_basic(root, team_name, week)
-                    if players_data:
-                        all_player_data.extend(players_data)
-            except Exception as e:
-                st.warning(f"Error getting roster for {team_name}: {e}")
-                continue
+            # Step 3: Merge the data
+            merged_data = _self._merge_roster_and_points(roster_data, points_data)
+            
+            all_player_data.extend(merged_data)
         
         return all_player_data
     
-    def _extract_players_with_stats(self, root_element, team_name: str, week: int) -> List[Dict]:
-        """Extract player data including fantasy points from combined endpoint"""
-        players_data = []
+    def _get_team_roster_structure(self, team_key: str, team_name: str, week: int) -> List[Dict]:
+        """Get just the roster structure (positions, starter/bench status)"""
+        roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
         
-        for player in root_element.findall('.//y:player', config.YAHOO_NS):
-            player_data = self._extract_player_info_with_stats(player, team_name, week)
-            if player_data:
-                players_data.append(player_data)
-        
-        return players_data
+        try:
+            resp = self.oauth.get(roster_url)
+            if resp.status_code != 200:
+                return []
+            
+            root = ET.fromstring(resp.text)
+            roster_data = []
+            
+            for player in root.findall('.//y:player', config.YAHOO_NS):
+                player_info = self._extract_basic_roster_info(player, team_name, week)
+                if player_info:
+                    roster_data.append(player_info)
+            
+            return roster_data
+            
+        except Exception:
+            return []
     
-    def _extract_players_basic(self, root_element, team_name: str, week: int) -> List[Dict]:
-        """Extract basic player data without fantasy points"""
-        players_data = []
+    def _get_team_fantasy_points(self, team_key: str, team_name: str, week: int) -> Dict[str, float]:
+        """Get fantasy points for all players on a team"""
+        # Try the players/stats endpoint for this team and week
+        stats_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/players/stats;week={week}"
         
-        for player in root_element.findall('.//y:player', config.YAHOO_NS):
-            player_data = self._extract_player_info_basic(player, team_name, week)
-            if player_data:
-                players_data.append(player_data)
-        
-        return players_data
+        try:
+            resp = self.oauth.get(stats_url)
+            if resp.status_code != 200:
+                return {}
+            
+            root = ET.fromstring(resp.text)
+            points_dict = {}
+            
+            for player in root.findall('.//y:player', config.YAHOO_NS):
+                # Get player identifier
+                player_key_el = player.find('y:player_key', config.YAHOO_NS)
+                if player_key_el is None:
+                    continue
+                
+                player_key = player_key_el.text
+                
+                # Get fantasy points
+                points = self._extract_fantasy_points_from_stats(player)
+                points_dict[player_key] = points
+            
+            return points_dict
+            
+        except Exception:
+            return {}
     
-    def _extract_player_info_with_stats(self, player_element, team_name: str, week: int) -> Optional[Dict]:
-        """Extract player information with fantasy points"""
-        # Get basic player info
-        basic_info = self._get_basic_player_info(player_element, team_name, week)
-        if not basic_info:
+    def _extract_basic_roster_info(self, player_element, team_name: str, week: int) -> Optional[Dict]:
+        """Extract basic roster info without fantasy points"""
+        # Get player key for matching
+        player_key_el = player_element.find('y:player_key', config.YAHOO_NS)
+        if player_key_el is None:
             return None
+        player_key = player_key_el.text
         
-        # Look for fantasy points in player_stats
-        points = self._extract_fantasy_points_from_stats(player_element)
-        basic_info["Points"] = points
-        
-        return basic_info
-    
-    def _extract_player_info_basic(self, player_element, team_name: str, week: int) -> Optional[Dict]:
-        """Extract player information without fantasy points"""
-        basic_info = self._get_basic_player_info(player_element, team_name, week)
-        if basic_info:
-            basic_info["Points"] = 0.0  # No points data available
-        return basic_info
-    
-    def _get_basic_player_info(self, player_element, team_name: str, week: int) -> Optional[Dict]:
-        """Extract basic player information (name, position, starter status)"""
         # Get player name
         name_el = player_element.find('y:name/y:full', config.YAHOO_NS)
         if name_el is None:
@@ -716,6 +716,7 @@ class FootballAnalytics:
         natural_position = pos_el.text if pos_el is not None else selected_position
         
         return {
+            "Player_Key": player_key,
             "Team": team_name,
             "Player": player_name,
             "Position": self._clean_position(natural_position),
@@ -723,6 +724,25 @@ class FootballAnalytics:
             "Is_Starter": is_starter,
             "Week": week
         }
+    
+    def _merge_roster_and_points(self, roster_data: List[Dict], points_data: Dict[str, float]) -> List[Dict]:
+        """Merge roster structure with fantasy points data"""
+        merged_data = []
+        
+        for player_info in roster_data:
+            player_key = player_info.get("Player_Key", "")
+            points = points_data.get(player_key, 0.0)
+            
+            # Add points to the player info
+            player_info["Points"] = points
+            
+            # Remove the player_key since it's just for matching
+            if "Player_Key" in player_info:
+                del player_info["Player_Key"]
+            
+            merged_data.append(player_info)
+        
+        return merged_data
     
     def _extract_fantasy_points_from_stats(self, player_element) -> float:
         """Extract fantasy points from player stats section"""
