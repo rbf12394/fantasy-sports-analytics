@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+with col2:
+                if st.button("Step-by-Step Debug"):
+                    team_key = selected_team.split("(")[1].rstrip(")")
+                    team_name = selected_team.split("#!/usr/bin/env python3
 """
 Fantasy Sports Analytics Suite - Clean Working Version
 Simplified football analytics with proper debugging
@@ -831,7 +834,69 @@ class FootballAnalytics:
         
         return fig, pivot_sorted
     
-    def debug_single_endpoint(self, team_key: str, week: int, endpoint_url: str) -> Dict:
+    def debug_step_by_step(self, team_key: str, team_name: str, week: int) -> Dict:
+        """Debug each step of the data extraction process"""
+        results = {
+            "step1_roster": None,
+            "step2_stats": None,
+            "step3_merged": None,
+            "errors": []
+        }
+        
+        # Step 1: Test roster endpoint
+        try:
+            roster_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/roster;week={week}"
+            resp = self.oauth.get(roster_url)
+            results["step1_roster"] = {
+                "url": roster_url,
+                "status": resp.status_code,
+                "success": resp.status_code == 200,
+                "response_preview": resp.text[:1000] if resp.status_code == 200 else resp.text[:500]
+            }
+            
+            if resp.status_code == 200:
+                roster_data = self._get_team_roster_structure(team_key, team_name, week)
+                results["step1_roster"]["extracted_players"] = len(roster_data)
+                results["step1_roster"]["sample_data"] = roster_data[:3] if roster_data else []
+                
+        except Exception as e:
+            results["errors"].append(f"Step 1 error: {str(e)}")
+        
+        # Step 2: Test stats endpoint
+        try:
+            stats_url = f"{config.FANTASY_BASE_URL}/team/{team_key}/players/stats;week={week}"
+            resp = self.oauth.get(stats_url)
+            results["step2_stats"] = {
+                "url": stats_url,
+                "status": resp.status_code,
+                "success": resp.status_code == 200,
+                "response_preview": resp.text[:1000] if resp.status_code == 200 else resp.text[:500]
+            }
+            
+            if resp.status_code == 200:
+                points_data = self._get_team_fantasy_points(team_key, team_name, week)
+                results["step2_stats"]["extracted_points"] = len(points_data)
+                results["step2_stats"]["sample_points"] = dict(list(points_data.items())[:3]) if points_data else {}
+                
+        except Exception as e:
+            results["errors"].append(f"Step 2 error: {str(e)}")
+        
+        # Step 3: Test merging
+        try:
+            if results["step1_roster"] and results["step2_stats"]:
+                roster_data = self._get_team_roster_structure(team_key, team_name, week)
+                points_data = self._get_team_fantasy_points(team_key, team_name, week)
+                merged = self._merge_roster_and_points(roster_data, points_data)
+                
+                results["step3_merged"] = {
+                    "merged_players": len(merged),
+                    "sample_merged": merged[:3] if merged else [],
+                    "points_found": sum(1 for p in merged if p.get("Points", 0) > 0)
+                }
+        except Exception as e:
+            results["errors"].append(f"Step 3 error: {str(e)}")
+        
+        return results
         """Debug a single API endpoint"""
         try:
             resp = self.oauth.get(endpoint_url)
