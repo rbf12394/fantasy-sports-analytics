@@ -809,8 +809,19 @@ class FootballAnalytics:
                 st.warning("No starter data found for selected weeks.")
                 return None, pd.DataFrame()
         
-        # Aggregate by team and position
+        # Debug: Show what we're aggregating
+        st.write("**Debug - Sample data being aggregated:**")
+        sample_debug = df[df['Position'] == 'DEF'].head(10) if 'DEF' in df['Position'].values else df.head(5)
+        st.dataframe(sample_debug[['Team', 'Player', 'Position', 'Points', 'Week']])
+        
+        # Aggregate by team and position - sum points across all weeks
         totals = df.groupby(["Team", "Position"])["Points"].sum().reset_index()
+        
+        # Debug: Show aggregation results
+        st.write("**Debug - Aggregated totals:**")
+        def_totals = totals[totals['Position'] == 'DEF'] if 'DEF' in totals['Position'].values else totals.head(3)
+        st.dataframe(def_totals)
+        
         pivot = totals.pivot(index="Team", columns="Position", values="Points").fillna(0)
         
         # Sort by total points
