@@ -933,7 +933,7 @@ def render_landing_page():
         # Center the logo with columns
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            st.image("skipper_logo.png", width=400)
+            st.image("skipper_logo.png", width=800)
     except:
         # Fallback if logo file not found - larger and more prominent
         st.markdown("""
