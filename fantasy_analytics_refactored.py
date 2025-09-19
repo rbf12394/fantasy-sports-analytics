@@ -1459,7 +1459,7 @@ def render_espn_analytics(league):
         
         status_text.text(f"Processing season-to-date data (Weeks {min(completed_weeks)}-{max(completed_weeks)})...")
         all_data = get_espn_roster_data(league, st.session_state.debug_mode)
-        progress.progress(1.0)
+        progress_bar.progress(1.0)
         
         status_text.text("Creating visualization...")
         
