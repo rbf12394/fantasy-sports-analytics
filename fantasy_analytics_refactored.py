@@ -1296,7 +1296,16 @@ def render_espn_interface():
             # Show league info
             col1, col2, col3 = st.columns(3)
             with col1:
-                league_name = getattr(league, 'settings', {}).get('name') or getattr(league, 'name', 'Unknown League')
+                # Try different ways to get the league name
+                league_name = "Unknown League"
+                try:
+                    if hasattr(league, 'settings') and hasattr(league.settings, 'name'):
+                        league_name = league.settings.name
+                    elif hasattr(league, 'name'):
+                        league_name = league.name
+                except:
+                    league_name = "Unknown League"
+                
                 st.metric("League", league_name)
             with col2:
                 st.metric("Year", st.session_state.espn_credentials['year'])
