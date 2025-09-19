@@ -1296,7 +1296,8 @@ def render_espn_interface():
             # Show league info
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("League", getattr(league, 'name', 'Unknown'))
+                league_name = getattr(league, 'settings', {}).get('name') or getattr(league, 'name', 'Unknown League')
+                st.metric("League", league_name)
             with col2:
                 st.metric("Year", st.session_state.espn_credentials['year'])
             with col3:
