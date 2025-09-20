@@ -1067,30 +1067,6 @@ def setup_page():
         )
     except st.errors.StreamlitAPIException:
         pass
-
-# Add Open Graph meta tags for better link previews
-    st.markdown("""
-    <head>
-        <!-- Open Graph meta tags for social media sharing -->
-        <meta property="og:title" content="Skipper Fantasy Analytics Suite">
-        <meta property="og:description" content="Advanced Fantasy Sports Intelligence for Yahoo and ESPN leagues. Get Z-score analysis, team strength metrics, and comprehensive performance tracking.">
-        <meta property="og:image" content="https://raw.githubusercontent.com/rbf12394/fantasy-sports-analytics/main/skipper_logo.png">
-        <meta property="og:image:alt" content="Skipper Analytics Logo">
-        <meta property="og:url" content="https://heyskip.streamlit.app">
-        <meta property="og:type" content="website">
-        <meta property="og:site_name" content="Skipper Analytics">
-        
-        <!-- Twitter Card meta tags -->
-        <meta name="twitter:card" content="summary_large_image">
-        <meta name="twitter:title" content="Skipper Fantasy Analytics Suite">
-        <meta name="twitter:description" content="Advanced Fantasy Sports Intelligence for Yahoo and ESPN leagues">
-        <meta name="twitter:image" content="https://raw.githubusercontent.com/rbf12394/fantasy-sports-analytics/main/skipper_logo.png">
-        
-        <!-- Additional meta tags -->
-        <meta name="description" content="Advanced Fantasy Sports Analytics for Yahoo and ESPN leagues. Z-score analysis, team strength metrics, and comprehensive performance tracking.">
-        <meta name="keywords" content="fantasy sports, analytics, yahoo fantasy, espn fantasy, baseball, football">
-    </head>
-    """, unsafe_allow_html=True)
     
 def render_sidebar():
     """Render sidebar with platform-specific controls"""
